@@ -1,0 +1,41 @@
+From bcffa03f1365d6ff91b809fbea2118c0c3d3d1f3 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 14:30:56 +0000
+Subject: [PATCH] ps5(omega): 0007-gl-renderer-no-pbo-ps5
+
+---
+ .../VideoPlayer/VideoRenderers/LinuxRendererGL.cpp    | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp b/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp
+index a7b37bc1fa..d580b9aab4 100644
+--- a/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp
++++ b/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp
+@@ -38,6 +38,9 @@
+ #endif
+ 
+ #include <locale.h>
++#if defined(TARGET_PS5)
++#include <unistd.h>
++#endif
+ #include <memory>
+ #include <mutex>
+ 
+@@ -255,6 +258,14 @@ bool CLinuxRendererGL::Configure(const VideoPicture &picture, float fps, unsigne
+   }
+ 
+   return true;
++#if defined(TARGET_PS5)
++  // The PS5 GL driver fills textures from a pixel buffer object by reading it
++  // back on the CPU, from write-combined memory: ~23 ms per 1080p plane.
++  // Upload from Kodi's ordinary buffers instead ("kodi-pbo" in the title
++  // folder restores the PBO path for comparison).
++  if (access("/app0/kodi-pbo", F_OK) != 0)
++    m_pboSupported = false;
++#endif
+ }
+ 
+ bool CLinuxRendererGL::ConfigChanged(const VideoPicture &picture)
+-- 
+2.43.0
+

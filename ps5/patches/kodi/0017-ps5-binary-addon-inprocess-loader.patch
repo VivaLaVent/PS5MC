@@ -1,0 +1,63 @@
+ps5: load binary add-ons in-process via the ELF loader.
+
+CAddonDll loads a binary add-on's shared object through DllAddon ->
+DllDynamic::Load -> the LibraryLoader factory, which on every non-Windows
+target picks SoLoader (dlopen). A PS5 title has no system dynamic loader, so
+dlopen always fails and no binary add-on can load.
+
+This selects CPS5AddonLoader on PS5 instead. It implements the LibraryLoader
+interface over the in-process ELF loader (xbmc/platform/ps5/elf/): it maps and
+relocates the add-on's .so itself, resolves the C/C++ runtime symbols the
+add-on imports against the eboot (HostExports), runs the add-on's
+constructors, and exposes ADDON_Create/ADDON_GetTypeVersion/
+ADDON_GetTypeMinVersion through ResolveExport - so CAddonDll and everything
+above it work unchanged. The loader sources are compiled into the dllloader
+library on PS5.
+
+Add-ons reach Kodi through the AddonGlobalInterface function-pointer struct
+passed to ADDON_Create, not named imports, so no Kodi API symbols need
+exporting - only the runtime/libc set the export table covers.
+--- a/xbmc/cores/DllLoader/CMakeLists.txt
++++ b/xbmc/cores/DllLoader/CMakeLists.txt
+@@ -14,6 +14,16 @@ else()
+   list(APPEND HEADERS Win32DllLoader.h)
+ endif()
+ 
++if(CORE_SYSTEM_NAME STREQUAL ps5)
++  # In-process ELF loader for binary add-ons (no system dynamic loader on PS5).
++  list(APPEND SOURCES ${CMAKE_SOURCE_DIR}/xbmc/platform/ps5/elf/ElfLoader.cpp
++                      ${CMAKE_SOURCE_DIR}/xbmc/platform/ps5/elf/HostExports.cpp
++                      ${CMAKE_SOURCE_DIR}/xbmc/platform/ps5/elf/PS5AddonLoader.cpp)
++  list(APPEND HEADERS ${CMAKE_SOURCE_DIR}/xbmc/platform/ps5/elf/ElfLoader.h
++                      ${CMAKE_SOURCE_DIR}/xbmc/platform/ps5/elf/HostExports.h
++                      ${CMAKE_SOURCE_DIR}/xbmc/platform/ps5/elf/PS5AddonLoader.h)
++endif()
++
+ add_definitions(-DAPI_DEBUG)
+ 
+ core_add_library(dllloader)
+--- a/xbmc/cores/DllLoader/DllLoaderContainer.cpp
++++ b/xbmc/cores/DllLoader/DllLoaderContainer.cpp
+@@ -10,6 +10,9 @@
+ #ifdef TARGET_POSIX
+ #include "SoLoader.h"
+ #endif
++#if defined(TARGET_PS5)
++#include "platform/ps5/elf/PS5AddonLoader.h"
++#endif
+ #ifdef TARGET_WINDOWS
+ #include "Win32DllLoader.h"
+ #endif
+@@ -228,7 +231,11 @@ LibraryLoader* DllLoaderContainer::LoadDll(const char* sName, bool bLoadSymbols)
+ #endif
+ 
+   LibraryLoader* pLoader;
+-#ifdef TARGET_POSIX
++#if defined(TARGET_PS5)
++  // A PS5 title has no dynamic loader; load binary add-ons in-process. See
++  // platform/ps5/elf/. bLoadSymbols/global scope do not apply.
++  pLoader = new CPS5AddonLoader(sName);
++#elif defined(TARGET_POSIX)
+   pLoader = new SoLoader(sName, bLoadSymbols);
+ #elif defined(TARGET_WINDOWS)
+   pLoader = new Win32DllLoader(sName, false);

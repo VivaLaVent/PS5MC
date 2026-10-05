@@ -1,0 +1,54 @@
+ps5: smb:// on libsmb2 (HAS_FILESYSTEM_SMB2, xbmc/platform/ps5/filesystem):
+file/directory factories and the Add network location dialog.
+
+--- a/xbmc/filesystem/FileFactory.cpp	2026-09-25 21:00:09.437755830 +0000
++++ b/xbmc/filesystem/FileFactory.cpp	2026-09-25 21:00:09.471272136 +0000
+@@ -25,6 +25,8 @@
+ #else
+ #include "platform/posix/filesystem/SMBFile.h"
+ #endif
++#elif defined(HAS_FILESYSTEM_SMB2)
++#include "platform/ps5/filesystem/SMB2File.h"
+ #endif
+ #ifdef HAS_OPTICAL_DRIVE
+ #include "CDDAFile.h"
+@@ -168,6 +170,8 @@
+ #else
+   else if (url.IsProtocol("smb")) return new CSMBFile();
+ #endif
++#elif defined(HAS_FILESYSTEM_SMB2)
++  else if (url.IsProtocol("smb")) return new CSMB2File();
+ #endif
+ #ifdef HAS_FILESYSTEM_NFS
+   else if (url.IsProtocol("nfs")) return new CNFSFile();
+--- a/xbmc/filesystem/DirectoryFactory.cpp	2026-09-25 21:00:09.442971134 +0000
++++ b/xbmc/filesystem/DirectoryFactory.cpp	2026-09-25 21:00:09.471724722 +0000
+@@ -79,6 +79,8 @@
+ #else
+ #include "platform/posix/filesystem/SMBDirectory.h"
+ #endif
++#elif defined(HAS_FILESYSTEM_SMB2)
++#include "platform/ps5/filesystem/SMB2Directory.h"
+ #endif
+ 
+ #if defined(TARGET_ANDROID)
+@@ -220,6 +222,8 @@
+ #else
+   if (url.IsProtocol("smb")) return new CSMBDirectory();
+ #endif
++#elif defined(HAS_FILESYSTEM_SMB2)
++  if (url.IsProtocol("smb")) return new CSMB2Directory();
+ #endif
+ #ifdef HAS_UPNP
+   if (url.IsProtocol("upnp")) return new CUPnPDirectory();
+--- a/xbmc/network/GUIDialogNetworkSetup.cpp	2026-09-25 21:00:09.447946804 +0000
++++ b/xbmc/network/GUIDialogNetworkSetup.cpp	2026-09-25 21:00:09.471852665 +0000
+@@ -454,7 +454,7 @@
+ void CGUIDialogNetworkSetup::UpdateAvailableProtocols()
+ {
+   m_protocols.clear();
+-#ifdef HAS_FILESYSTEM_SMB
++#if defined(HAS_FILESYSTEM_SMB) || defined(HAS_FILESYSTEM_SMB2)
+   // most popular protocol at the first place
+   m_protocols.emplace_back(true, true, true, false, true, 0, "smb", 20171, "");
+ #endif

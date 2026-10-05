@@ -1,0 +1,30 @@
+ps5: no pixel buffer objects and rectangle textures for video planes, always
+(the kodi-pbo / kodi-tex2d comparison switches of 0007/0008 are gone).
+
+--- a/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp	2026-09-26 16:22:24.399963344 +0000
++++ b/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp	2026-09-26 16:22:24.411752444 +0000
+@@ -258,18 +258,12 @@
+ 
+   m_pboSupported = CGLExtensions::IsExtensionSupported(CGLExtensions::ARB_pixel_buffer_object);
+ #if defined(TARGET_PS5)
+-  // The PS5 GL driver fills textures from a pixel buffer object by reading it
+-  // back on the CPU, from write-combined memory: ~23 ms per 1080p plane.
+-  // Upload from Kodi's ordinary buffers instead ("kodi-pbo" in the title
+-  // folder restores the PBO path for comparison).
+-  if (access("/app0/kodi-pbo", F_OK) != 0)
+-    m_pboSupported = false;
+-  // The driver keeps 2D R8/RG8 textures that can also be render targets in
+-  // its tiled layout and converts every upload pixel by pixel (~23 ms per
+-  // 1080p plane). Rectangle textures are always linear: uploads are row
+-  // copies. "kodi-tex2d" in the title folder restores 2D textures.
+-  if (access("/app0/kodi-tex2d", F_OK) != 0)
+-    m_textureTarget = GL_TEXTURE_RECTANGLE;
++  // PS5 GL driver: uploads from pixel buffer objects gain nothing, and 2D
++  // R8/RG8 textures that can also be render targets are kept tiled and filled
++  // pixel by pixel (~23 ms per 1080p plane). Upload from Kodi's own buffers
++  // into rectangle textures, which the driver keeps linear: row copies.
++  m_pboSupported = false;
++  m_textureTarget = GL_TEXTURE_RECTANGLE;
+ #endif
+ 
+   if (!CServiceBroker::GetWinSystem()->SetVideoOutput(&picture))

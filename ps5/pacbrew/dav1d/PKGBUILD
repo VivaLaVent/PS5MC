@@ -1,0 +1,41 @@
+# dav1d: AV1 software decoder, for Kodi's FFmpeg (--enable-libdav1d). The PS5
+# has no AV1 hardware decoder exposed to titles, and FFmpeg's own "av1" decoder
+# needs hardware acceleration - so without dav1d, AV1 files (Dolby Vision
+# profile 10, many web downloads) play sound only. Cross-built with the SDK's
+# meson wrapper like pacbrew's mesa package; the x86-64 assembly needs nasm on
+# the host. Built and installed by scripts/15-build-dav1d.sh.
+pkgname=ps5-payload-dav1d
+pkgver=1.5.1
+pkgrel=1
+pkgdesc='AV1 cross-platform decoder, focused on speed and correctness'
+arch=('any')
+url='https://code.videolan.org/videolan/dav1d'
+license=('BSD-2-Clause')
+options=(!strip libtool staticlibs)
+source=("https://downloads.videolan.org/pub/videolan/dav1d/$pkgver/dav1d-$pkgver.tar.xz")
+sha256sums=('SKIP')
+groups=('ps5-payload-dev')
+depends=()
+makedepends=('ps5-payload-sdk' 'nasm')
+
+build() {
+    source "${PS5_PAYLOAD_SDK}/toolchain/prospero.sh"
+    cd dav1d-$pkgver
+    ${MESON} setup builddir \
+	--prefix="${PREFIX}" \
+	--default-library=static \
+	-Denable_asm=true \
+	-Denable_tools=false \
+	-Denable_tests=false \
+	-Denable_examples=false \
+	-Dlogging=false
+    ${MESON} compile -C builddir
+}
+
+package() {
+    source "${PS5_PAYLOAD_SDK}/toolchain/prospero.sh"
+    cd dav1d-$pkgver
+    export DESTDIR="${pkgdir}/${DESTDIR}"
+    ${MESON} install -C builddir --destdir "${DESTDIR}"
+    ${PS5_CROSS_FIX_ROOT} "${DESTDIR}/${PREFIX}"
+}

@@ -1,0 +1,50 @@
+From befa9edf541812968c3dbe2c30b3ad7047febbd9 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 14:31:30 +0000
+Subject: [PATCH] ps5(omega): 0013 default-framebuffer-hdr (ported: Omega has
+ no FBO depth-buffer block; that hunk dropped)
+
+---
+ .../VideoRenderers/FrameBufferObject.cpp           | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/xbmc/cores/VideoPlayer/VideoRenderers/FrameBufferObject.cpp b/xbmc/cores/VideoPlayer/VideoRenderers/FrameBufferObject.cpp
+index 58c3410e99..27bcc68b4b 100644
+--- a/xbmc/cores/VideoPlayer/VideoRenderers/FrameBufferObject.cpp
++++ b/xbmc/cores/VideoPlayer/VideoRenderers/FrameBufferObject.cpp
+@@ -13,6 +13,16 @@
+ #include "utils/GLUtils.h"
+ #include "utils/log.h"
+ 
++// The "default" framebuffer: 0, except on the PS5 while HDR output is active,
++// where Kodi's frame is rendered into a 10-bit intermediate target that a final
++// pass packs for the HDR scanout (xbmc/windowing/ps5/HdrOutputPS5.cpp).
++#if defined(TARGET_PS5)
++#include "windowing/ps5/DefaultFramebufferPS5.h"
++#define KODI_DEFAULT_FRAMEBUFFER KODI::PLATFORM::PS5::DefaultFramebuffer()
++#else
++#define KODI_DEFAULT_FRAMEBUFFER 0
++#endif
++
+ //////////////////////////////////////////////////////////////////////
+ // CFrameBufferObject
+ //////////////////////////////////////////////////////////////////////
+@@ -91,7 +101,7 @@ bool CFrameBufferObject::CreateAndBindToTexture(GLenum target, int width, int he
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target, m_texid, 0);
+   VerifyGLState();
+   GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
++  glBindFramebuffer(GL_FRAMEBUFFER, KODI_DEFAULT_FRAMEBUFFER);
+   if (status != GL_FRAMEBUFFER_COMPLETE)
+   {
+     VerifyGLState();
+@@ -123,5 +133,5 @@ bool CFrameBufferObject::BeginRender()
+ void CFrameBufferObject::EndRender() const
+ {
+   if (IsValid())
+-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
++    glBindFramebuffer(GL_FRAMEBUFFER, KODI_DEFAULT_FRAMEBUFFER);
+ }
+-- 
+2.43.0
+

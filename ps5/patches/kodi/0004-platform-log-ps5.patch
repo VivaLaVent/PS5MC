@@ -1,0 +1,13 @@
+ps5 provides its own IPlatformLog (klog sink) in xbmc/platform/ps5.
+
+--- a/xbmc/platform/posix/utils/PosixInterfaceForCLog.cpp	2026-09-25 18:19:31.677615564 +0000
++++ b/xbmc/platform/posix/utils/PosixInterfaceForCLog.cpp	2026-09-25 18:19:31.681679370 +0000
+@@ -14,7 +14,7 @@
+ #include <spdlog/sinks/dist_sink.h>
+ #include <spdlog/sinks/stdout_color_sinks.h>
+ 
+-#if !defined(TARGET_ANDROID) && !defined(TARGET_DARWIN)
++#if !defined(TARGET_ANDROID) && !defined(TARGET_DARWIN) && !defined(TARGET_PS5)
+ std::unique_ptr<IPlatformLog> IPlatformLog::CreatePlatformLog()
+ {
+   return std::make_unique<CPosixInterfaceForCLog>();

@@ -1,0 +1,24 @@
+CPython refuses cross builds for hosts it does not list; the PS5 is x86_64-pc-freebsd, which CPython supports natively.
+
+--- a/configure
++++ b/configure
+@@ -4124,6 +4124,9 @@
+ 	*-*-vxworks*)
+ 	    ac_sys_system=VxWorks
+ 	    ;;
++	*-*-freebsd*)
++	    ac_sys_system=FreeBSD
++	    ;;
+ 	*-*-emscripten)
+ 	    ac_sys_system=Emscripten
+ 	    ;;
+@@ -4628,6 +4631,9 @@
+ 	*-*-vxworks*)
+ 		_host_ident=$host_cpu
+ 		;;
++	*-*-freebsd*)
++		_host_ident=$host_cpu
++		;;
+ 	*-*-emscripten)
+ 		_host_ident=$(emcc -dumpversion | cut -f1 -d-)-$host_cpu
+ 		;;

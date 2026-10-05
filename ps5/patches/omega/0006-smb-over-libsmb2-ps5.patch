@@ -1,0 +1,71 @@
+From 764c4fc1a0396ffa2e245c1cb7eff402fed38b04 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 14:30:56 +0000
+Subject: [PATCH] ps5(omega): 0006-smb-over-libsmb2-ps5
+
+---
+ xbmc/filesystem/DirectoryFactory.cpp   | 4 ++++
+ xbmc/filesystem/FileFactory.cpp        | 4 ++++
+ xbmc/network/GUIDialogNetworkSetup.cpp | 2 +-
+ 3 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/xbmc/filesystem/DirectoryFactory.cpp b/xbmc/filesystem/DirectoryFactory.cpp
+index e9c76cba97..4cb4e002c2 100644
+--- a/xbmc/filesystem/DirectoryFactory.cpp
++++ b/xbmc/filesystem/DirectoryFactory.cpp
+@@ -45,6 +45,8 @@
+ #else
+ #include "platform/posix/filesystem/SMBDirectory.h"
+ #endif
++#elif defined(HAS_FILESYSTEM_SMB2)
++#include "platform/ps5/filesystem/SMB2Directory.h"
+ #endif
+ #include "CDDADirectory.h"
+ #include "PluginDirectory.h"
+@@ -196,6 +198,8 @@ IDirectory* CDirectoryFactory::Create(const CURL& url)
+ #else
+   if (url.IsProtocol("smb")) return new CSMBDirectory();
+ #endif
++#elif defined(HAS_FILESYSTEM_SMB2)
++  if (url.IsProtocol("smb")) return new CSMB2Directory();
+ #endif
+ #ifdef HAS_UPNP
+   if (url.IsProtocol("upnp")) return new CUPnPDirectory();
+diff --git a/xbmc/filesystem/FileFactory.cpp b/xbmc/filesystem/FileFactory.cpp
+index 6f1d3647e2..479bdf900e 100644
+--- a/xbmc/filesystem/FileFactory.cpp
++++ b/xbmc/filesystem/FileFactory.cpp
+@@ -25,6 +25,8 @@
+ #else
+ #include "platform/posix/filesystem/SMBFile.h"
+ #endif
++#elif defined(HAS_FILESYSTEM_SMB2)
++#include "platform/ps5/filesystem/SMB2File.h"
+ #endif
+ #include "CDDAFile.h"
+ #if defined(HAS_ISO9660PP)
+@@ -166,6 +168,8 @@ IFile* CFileFactory::CreateLoader(const CURL& url)
+ #else
+   else if (url.IsProtocol("smb")) return new CSMBFile();
+ #endif
++#elif defined(HAS_FILESYSTEM_SMB2)
++  else if (url.IsProtocol("smb")) return new CSMB2File();
+ #endif
+ #ifdef HAS_FILESYSTEM_NFS
+   else if (url.IsProtocol("nfs")) return new CNFSFile();
+diff --git a/xbmc/network/GUIDialogNetworkSetup.cpp b/xbmc/network/GUIDialogNetworkSetup.cpp
+index 0b56e36d10..6529fac87e 100644
+--- a/xbmc/network/GUIDialogNetworkSetup.cpp
++++ b/xbmc/network/GUIDialogNetworkSetup.cpp
+@@ -432,7 +432,7 @@ void CGUIDialogNetworkSetup::Reset()
+ void CGUIDialogNetworkSetup::UpdateAvailableProtocols()
+ {
+   m_protocols.clear();
+-#ifdef HAS_FILESYSTEM_SMB
++#if defined(HAS_FILESYSTEM_SMB) || defined(HAS_FILESYSTEM_SMB2)
+   // most popular protocol at the first place
+   m_protocols.emplace_back(Protocol{true, true, true, false, true, 0, "smb", 20171, ""});
+ #endif
+-- 
+2.43.0
+

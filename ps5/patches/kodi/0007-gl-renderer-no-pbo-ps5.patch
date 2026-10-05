@@ -1,0 +1,30 @@
+ps5: upload video frames without pixel buffer objects (the driver reads PBOs back
+from write-combined memory on the CPU); kodi-pbo in the title folder restores them.
+
+--- a/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp	2026-09-25 22:44:20.196846836 +0000
++++ b/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp	2026-09-25 22:44:20.269964519 +0000
+@@ -37,6 +37,9 @@
+ #endif
+ 
+ #include <locale.h>
++#if defined(TARGET_PS5)
++#include <unistd.h>
++#endif
+ #include <memory>
+ #include <mutex>
+ 
+@@ -254,6 +257,14 @@
+   m_pixelRatio = 1.0;
+ 
+   m_pboSupported = CGLExtensions::IsExtensionSupported(CGLExtensions::ARB_pixel_buffer_object);
++#if defined(TARGET_PS5)
++  // The PS5 GL driver fills textures from a pixel buffer object by reading it
++  // back on the CPU, from write-combined memory: ~23 ms per 1080p plane.
++  // Upload from Kodi's ordinary buffers instead ("kodi-pbo" in the title
++  // folder restores the PBO path for comparison).
++  if (access("/app0/kodi-pbo", F_OK) != 0)
++    m_pboSupported = false;
++#endif
+ 
+   if (!CServiceBroker::GetWinSystem()->SetVideoOutput(&picture))
+     CLog::Log(LOGWARNING, "LinuxRendererGL::Configure: SetVideoOutput failed");

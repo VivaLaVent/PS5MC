@@ -1,0 +1,167 @@
+# CPython 3.14.6 for Kodi's Python interface (script, plugin and service
+# add-ons, the TMDb scrapers). Built like Kodi's own depends recipe
+# (tools/depends/target/python3): static, every C module compiled into
+# libpython3.14.a (MODULE_BUILDTYPE=static), no subprocesses (as Kodi's tvOS
+# build - a title cannot start processes). Built and installed by
+# scripts/19-build-python.sh.
+pkgname=ps5-payload-python3
+pkgver=3.14.6
+pkgrel=1
+pkgdesc='Python interpreter, static, for Kodi'
+arch=('any')
+url='https://www.python.org'
+license=('PSF-2.0')
+options=(!strip libtool staticlibs)
+source=("https://www.python.org/ftp/python/$pkgver/Python-$pkgver.tar.xz"
+        "cross-freebsd.patch"
+        "no-subprocess.patch"
+        "static-compile.patch"
+        "ps5-stdio-nomacros.patch"
+        "ps5-socket-libscenet.patch"
+        "ps5_compat.h"
+        "ps5_pysocket.h")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+groups=('ps5-payload-dev')
+depends=('ps5-payload-zlib' 'ps5-payload-expat' 'ps5-payload-xz' 'ps5-payload-bzip2'
+         'ps5-payload-openssl' 'ps5-payload-sqlite')
+makedepends=('ps5-payload-sdk')
+
+# The modules Kodi's depends build leaves out, plus those that need what a
+# title lacks (processes, shared memory, libffi for ctypes).
+_modules=(py_cv_module_grp=n/a py_cv_module_syslog=n/a py_cv_module__dbm=n/a
+          py_cv_module__gdbm=n/a py_cv_module__uuid=n/a py_cv_module_readline=n/a
+          py_cv_module__curses=n/a py_cv_module__curses_panel=n/a py_cv_module_xx=n/a
+          py_cv_module_xxlimited=n/a py_cv_module_xxlimited_35=n/a
+          py_cv_module_xxsubtype=n/a py_cv_module__xxsubinterpreters=n/a
+          py_cv_module__tkinter=n/a py_cv_module__codecs_jp=n/a
+          py_cv_module__codecs_kr=n/a py_cv_module__codecs_tw=n/a
+          py_cv_module__decimal=n/a py_cv_module__zstd=n/a
+          py_cv_module__posixsubprocess=n/a py_cv_module__posixshmem=n/a
+          py_cv_module__multiprocessing=n/a py_cv_module__ctypes=n/a)
+
+# No processes (Kodi's tvOS list). getentropy() is provided by Kodi's C
+# library shims (kern.arandom), which configure cannot see in the sysroot;
+# its prototype comes from ps5_compat.h. pthread_getname_np is exported by
+# the SDK but declared nowhere; it only names threads in crash dumps, so it
+# is disabled rather than declared (declaring it would need <pthread.h> in
+# the force-included header, which breaks configure's function probes).
+# The OpenSSL ssl/hashlib checks link libssl+libcrypto standalone; libcrypto
+# references getentropy, which only Kodi's shim provides at Kodi link, so the
+# standalone test fails although OpenSSL 3.5.2 works (the network self-test
+# proves it). Their verdicts are forced to yes so _ssl and _hashlib are built
+# into libpython; their references resolve at Kodi link like all the rest.
+# _sha2 stays enabled (not in the n/a list) as hashlib's SHA-2 fallback.
+# sched.h is disabled, so every sched_* function check is disabled with it:
+# posixmodule defines sched_param_desc & co only under HAVE_SCHED_H but
+# references them under HAVE_SCHED_SETPARAM/SETSCHEDULER (incl. module init),
+# so header-off + functions-on is an inconsistent build. Scheduler control
+# is meaningless in a title anyway. (fexecve, not fexecv, is the real key.)
+_cache=(ac_cv_func_wait3=no ac_cv_func_wait4=no ac_cv_func_waitpid=no
+        ac_cv_func_execv=no ac_cv_func_fexecve=no ac_cv_func_setpriority=no
+        ac_cv_func_sendfile=no ac_cv_header_sched_h=no
+        ac_cv_func_posix_spawn=no ac_cv_func_posix_spawnp=no
+        ac_cv_func_forkpty=no ac_cv_lib_util_forkpty=no ac_cv_func_getgroups=no
+        ac_cv_func_system=no ac_cv_func_dup3=no ac_cv_func_pipe2=no
+        ac_cv_func_fork=no ac_cv_func_fork1=no ac_cv_func_vfork=no
+        ac_cv_func_getentropy=yes
+        ac_cv_func_pthread_getname_np=no ac_cv_func_pthread_get_name_np=no
+        ac_cv_func_pthread_setname_np=no ac_cv_func_pthread_set_name_np=no
+        ac_cv_func_getc_unlocked=no
+        ac_cv_func_sched_setparam=no ac_cv_func_sched_setscheduler=no
+        ac_cv_func_sched_get_priority_max=no ac_cv_func_sched_rr_get_interval=no
+        ac_cv_func_sched_setaffinity=no
+        ac_cv_working_openssl_ssl=yes ac_cv_working_openssl_hashlib=yes
+        ac_cv_file__dev_ptmx=no ac_cv_file__dev_ptc=no)
+
+prepare() {
+    cd Python-$pkgver
+    patch -p1 -i ../cross-freebsd.patch
+    patch -p1 -i ../no-subprocess.patch
+    patch -p1 -i ../static-compile.patch
+    patch -p1 -i ../ps5-stdio-nomacros.patch
+    patch -p1 -i ../ps5-socket-libscenet.patch
+}
+
+build() {
+    # 1. The same Python for the build machine: it only drives the cross build
+    #    (--with-build-python below), so it is built but NOT installed - its
+    #    in-tree ./python runs the stdlib straight from the source Lib/, which
+    #    is all --with-build-python needs. Skipping "make install" avoids the
+    #    host sharedinstall/compileall step, which is wasted work here and was
+    #    failing the build. Built before the PS5 toolchain env is sourced.
+    mkdir -p build-host && cd build-host
+    ../Python-$pkgver/configure --without-ensurepip --disable-test-modules
+    make
+    cd ..
+
+    # 2. The PS5 library
+    source "${PS5_PAYLOAD_SDK}/toolchain/prospero.sh"
+    # Prototypes the SDK headers lack for functions the target does provide
+    # (getentropy from Kodi's shim, pthread_getname_np from libkernel); see
+    # ps5_compat.h. Cross build only - the host build must not see it.
+    export CPPFLAGS="${CPPFLAGS:-} -include $srcdir/ps5_compat.h -DPS5_CLEANROOM_STDIO=1 -DPS5_PYSOCKET=1 -I$srcdir"
+    mkdir -p build-ps5 && cd build-ps5
+    ../Python-$pkgver/configure --prefix="${PREFIX}" \
+        --host=x86_64-pc-freebsd --build=x86_64-pc-linux-gnu \
+        --disable-shared --without-ensurepip --without-pymalloc --disable-ipv6 \
+        --with-build-python="$srcdir/build-host/python" \
+        --with-system-expat=yes --disable-test-modules \
+        --with-openssl="${PS5_SYSROOT}${PS5_HBROOT}" \
+        MODULE_BUILDTYPE=static "${_modules[@]}" "${_cache[@]}"
+
+    # Consistency check of the configure result, BEFORE the 20-minute compile.
+    # Two whole build iterations were lost to cache mistakes that only surfaced
+    # as compile errors deep in posixmodule.c: a misspelled cache key (fexecv
+    # vs fexecve) that silently did nothing, and disabling a header while its
+    # functions stayed enabled (HAVE_SCHED_H off, HAVE_SCHED_SETPARAM on ->
+    # sched_param_desc undeclared). Encode those invariants here.
+    _pc=pyconfig.h
+    _have() { grep -qE "^#define $1 1" "$_pc"; }
+    _fail=0
+    # every function we meant to disable must really be off
+    for f in EXECV FEXECVE POSIX_SPAWN POSIX_SPAWNP FORK FORK1 VFORK WAIT WAIT3 WAIT4 WAITPID \
+             SCHED_SETPARAM SCHED_SETSCHEDULER SCHED_RR_GET_INTERVAL SCHED_SETAFFINITY \
+             PTHREAD_GETNAME_NP PTHREAD_SETNAME_NP PTHREAD_SET_NAME_NP GETC_UNLOCKED; do
+      if _have "HAVE_$f"; then echo "!! pyconfig.h: HAVE_$f is defined but the cache disables it (typo in _cache?)"; _fail=1; fi
+    done
+    # header-off implies its functions off
+    if ! _have HAVE_SCHED_H; then
+      for f in SCHED_SETPARAM SCHED_SETSCHEDULER; do
+        _have "HAVE_$f" && { echo "!! pyconfig.h: HAVE_$f without HAVE_SCHED_H (inconsistent)"; _fail=1; }
+      done
+    fi
+    # things that MUST be on for a usable interpreter
+    for f in GETENTROPY CLOCK_GETTIME; do
+      _have "HAVE_$f" || { echo "!! pyconfig.h: HAVE_$f missing - Python will not start"; _fail=1; }
+    done
+    grep -q "PY_SSL_DEFAULT_CIPHERS\|OPENSSL" "$_pc" || true
+    [ "$_fail" = 0 ] || { echo "!! configure result inconsistent; fix _cache before compiling"; exit 1; }
+    echo "==> pyconfig.h consistency check passed"
+    make libpython3.14.a
+    make pybuilddir.txt   # the target's _sysconfigdata
+}
+
+package() {
+    source "${PS5_PAYLOAD_SDK}/toolchain/prospero.sh"
+    cd build-ps5
+    export DESTDIR="${pkgdir}/${DESTDIR}"
+    make inclinstall
+    install -Dm644 libpython3.14.a "${DESTDIR}${PREFIX}/lib/libpython3.14.a"
+    # the standard library: pure-Python modules plus the generated sysconfig
+    mkdir -p "${DESTDIR}${PREFIX}/lib/python3.14"
+    (cd ../Python-$pkgver/Lib && tar --exclude=test --exclude=tests \
+        --exclude=idlelib --exclude=tkinter --exclude=turtledemo \
+        --exclude=ensurepip --exclude=__pycache__ -cf - .) |
+        tar -xf - -C "${DESTDIR}${PREFIX}/lib/python3.14"
+    cp "$(cat pybuilddir.txt)"/_sysconfigdata*.py "${DESTDIR}${PREFIX}/lib/python3.14/"
+    # Byte-compile the stdlib, hash-validated (PEP 552), so the .pyc stay valid
+    # after FTP uploads lose mtimes; /app0 is read-only, so without them every
+    # import would try (and fail) to write __pycache__. The build-host
+    # interpreter is the same CPython 3.14.6, and .pyc bytecode is
+    # version-specific (no machine code), so its output loads on the console.
+    "$srcdir/build-host/python" -m compileall -q -j0 \
+        --invalidation-mode checked-hash "${DESTDIR}${PREFIX}/lib/python3.14"
+    install -Dm644 Misc/python.pc "${DESTDIR}${PREFIX}/lib/pkgconfig/python-3.14.pc"
+    install -Dm644 Misc/python-embed.pc "${DESTDIR}${PREFIX}/lib/pkgconfig/python-3.14-embed.pc"
+    ${PS5_CROSS_FIX_ROOT} "${DESTDIR}/${PREFIX}"
+}

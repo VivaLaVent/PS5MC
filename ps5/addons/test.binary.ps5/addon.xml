@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Stage-2 binary add-on: the smallest thing that proves Kodi loads a .so
+     through the PS5 in-process ELF loader, that it can call back into Kodi,
+     and that a C++ exception thrown inside it is caught. Not for the repo. -->
+<addon id="test.binary.ps5" name="PS5 Binary Loader Test" version="0.0.3" provider-name="kodi-ps5">
+  <requires>
+    <!-- A real binary screensaver must declare the instance ABI it implements;
+         without it Kodi finds the add-on but has no interface to bind and
+         never loads the library. Version from the console's own listing. -->
+    <import addon="kodi.binary.instance.screensaver" version="2.2.0"/>
+  </requires>
+  <extension point="xbmc.ui.screensaver" library_freebsd="test_binary_ps5.so"/>
+  <extension point="xbmc.addon.metadata">
+    <platform>freebsd</platform>
+    <summary lang="en_GB">PS5 binary add-on loader test</summary>
+    <description lang="en_GB">Proves the in-process ELF loader on the console.</description>
+    <license>GPL-2.0-or-later</license>
+  </extension>
+</addon>

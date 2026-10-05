@@ -1,0 +1,94 @@
+ps5: select the native IME keyboard, with generic fallback only on opening failure.
+
+diff --git a/xbmc/guilib/GUIKeyboard.h b/xbmc/guilib/GUIKeyboard.h
+index a6ca5ad00d..f4f57a9e61 100644
+--- a/xbmc/guilib/GUIKeyboard.h
++++ b/xbmc/guilib/GUIKeyboard.h
+@@ -67,6 +67,11 @@ class CGUIKeyboard : public ITimerCallback
+         m_idleTimer.Start(std::chrono::milliseconds(autoCloseMs), false);
+     }
+ 
++    void stopAutoCloseTimer()
++    {
++      m_idleTimer.Stop(true);
++    }
++
+     void resetAutoCloseTimer()
+     {
+       if (m_idleTimer.IsRunning())
+diff --git a/xbmc/guilib/GUIKeyboardFactory.cpp b/xbmc/guilib/GUIKeyboardFactory.cpp
+index dba33c1375..2eb165f35c 100644
+--- a/xbmc/guilib/GUIKeyboardFactory.cpp
++++ b/xbmc/guilib/GUIKeyboardFactory.cpp
+@@ -28,6 +28,10 @@
+ #include "platform/darwin/ios-common/DarwinEmbedKeyboard.h"
+ #endif
+ 
++#if defined(TARGET_PS5)
++#include "platform/ps5/input/PS5Keyboard.h"
++#endif
++
+ using namespace KODI::MESSAGING;
+ using KODI::UTILITY::CDigest;
+ 
+@@ -82,6 +86,10 @@ bool CGUIKeyboardFactory::ShowAndGetInput(std::string& aTextString,
+                                           unsigned int autoCloseMs /* = 0 */)
+ {
+   bool confirmed = false;
++#if defined(TARGET_PS5)
++  if (g_activeKeyboard)
++    return false;
++#endif
+   //heading can be a string or a localization id
+   std::string headingStr;
+   if (heading.isString())
+@@ -101,6 +109,21 @@ bool CGUIKeyboardFactory::ShowAndGetInput(std::string& aTextString,
+ #endif
+ 
+   auto& winManager = CServiceBroker::GetGUI()->GetWindowManager();
++#if defined(TARGET_PS5)
++  auto* nativeKeyboard =
++      winManager.GetWindow<KODI::PLATFORM::PS5::CPS5Keyboard>(WINDOW_DIALOG_KEYBOARD_TOUCH);
++  if (nativeKeyboard)
++  {
++    g_activeKeyboard = nativeKeyboard;
++    nativeKeyboard->startAutoCloseTimer(autoCloseMs);
++    confirmed = nativeKeyboard->ShowAndGetInput(keyTypedCB, aTextString, aTextString,
++                                               headingStr, hiddenInput);
++    g_activeKeyboard = nullptr;
++    if (!nativeKeyboard->NativeUnavailable())
++      return confirmed && (allowEmptyResult || !aTextString.empty());
++  }
++#endif
++
+   CGUIKeyboard* kb = nullptr;
+   if (useKodiKeyboard)
+     kb = winManager.GetWindow<CGUIDialogKeyboardGeneric>(WINDOW_DIALOG_KEYBOARD);
+diff --git a/xbmc/guilib/GUIWindowManager.cpp b/xbmc/guilib/GUIWindowManager.cpp
+index 0ca0a397f1..500dcef50b 100644
+--- a/xbmc/guilib/GUIWindowManager.cpp
++++ b/xbmc/guilib/GUIWindowManager.cpp
+@@ -89,7 +89,11 @@
+ #include "dialogs/GUIDialogGamepad.h"
+ #include "dialogs/GUIDialogKaiToast.h"
+ #include "dialogs/GUIDialogKeyboardGeneric.h"
++#if defined(TARGET_PS5)
++#include "platform/ps5/input/PS5Keyboard.h"
++#else
+ #include "dialogs/GUIDialogKeyboardTouch.h"
++#endif
+ #include "dialogs/GUIDialogNumeric.h"
+ #include "dialogs/GUIDialogOK.h"
+ #include "dialogs/GUIDialogPlayerControls.h"
+@@ -235,7 +239,11 @@ void CGUIWindowManager::CreateWindows()
+   Add(new CGUIDialogProgress);
+   Add(new CGUIDialogExtendedProgressBar);
+   Add(new CGUIDialogKeyboardGeneric);
++#if defined(TARGET_PS5)
++  Add(new KODI::PLATFORM::PS5::CPS5Keyboard);
++#else
+   Add(new CGUIDialogKeyboardTouch);
++#endif
+   Add(new CGUIDialogVolumeBar);
+   Add(new CGUIDialogSeekBar);
+   Add(new CGUIDialogSubMenu);

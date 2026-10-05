@@ -1,0 +1,26 @@
+From 8d584bc743fcb2ba7b2e33faaaf1a8160ed0dcd1 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 14:31:11 +0000
+Subject: [PATCH] ps5(omega): 0002 timeutils-clock-monotonic (ported: Omega
+ inverts the condition)
+
+---
+ xbmc/utils/TimeUtils.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/xbmc/utils/TimeUtils.cpp b/xbmc/utils/TimeUtils.cpp
+index 95c5069c11..ad06776d59 100644
+--- a/xbmc/utils/TimeUtils.cpp
++++ b/xbmc/utils/TimeUtils.cpp
+@@ -34,7 +34,7 @@ int64_t CurrentHostCounter(void)
+   return( (int64_t)PerformanceCount.QuadPart );
+ #else
+   struct timespec now;
+-#if defined(CLOCK_MONOTONIC_RAW) && !defined(TARGET_ANDROID)
++#if defined(CLOCK_MONOTONIC_RAW) && !defined(TARGET_ANDROID) && !defined(TARGET_PS5)
+   clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+ #else
+   clock_gettime(CLOCK_MONOTONIC, &now);
+-- 
+2.43.0
+
