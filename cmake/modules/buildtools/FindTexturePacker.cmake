@@ -54,8 +54,10 @@ if(NOT TARGET TexturePacker::TexturePacker::Executable)
       endif()
     endif()
 
-    # Ship TexturePacker only on Linux and FreeBSD
-    if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Ship TexturePacker only on Linux and FreeBSD. Not on ps5: the console is
+    # FreeBSD-derived but a build tool cannot run there, and the target-side
+    # build would need lzo2/png/gif/jpeg resolved before the internal deps exist.
+    if((CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND NOT CORE_SYSTEM_NAME STREQUAL ps5)
       # But skip shipping it if build architecture can be executed on host
       # and TEXTUREPACKER_EXECUTABLE is found
       if(NOT (HOST_CAN_EXECUTE_TARGET AND TEXTUREPACKER_EXECUTABLE))
