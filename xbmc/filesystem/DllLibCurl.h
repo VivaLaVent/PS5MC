@@ -57,6 +57,11 @@ public:
                         fd_set* exc_fd_set,
                         int* max_fd);
   CURLMcode multi_timeout(CURLM* multi_handle, long* timeout);
+  CURLMcode multi_wait(CURLM* multi_handle,
+                       struct curl_waitfd extra_fds[],
+                       unsigned int extra_nfds,
+                       int timeout_ms,
+                       int* numfds);
   CURLMsg* multi_info_read(CURLM* multi_handle, int* msgs_in_queue);
   CURLMcode multi_cleanup(CURLM* handle);
   curl_slist* slist_append(curl_slist* list, const char* to_append);

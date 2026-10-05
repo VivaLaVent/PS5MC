@@ -1822,6 +1822,25 @@ int8_t CCurlFile::CReadState::FillBuffer(unsigned int want)
     {
       case CURLM_OK:
       {
+#if defined(TARGET_PS5)
+        /* select() on a PS5 title does not reliably wake on socket readiness
+           (clean-room libc/network layer), so the fdset+select path below runs
+           the full timeout on every wait and transfers crawl. curl_multi_wait
+           uses poll() internally and returns as soon as data is ready. */
+        long timeout = 0;
+        if (CURLM_OK != g_curlInterface.multi_timeout(m_multiHandle, &timeout) || timeout < 0 ||
+            timeout > 200)
+          timeout = 200;
+        int numfds = 0;
+        if (g_curlInterface.multi_wait(m_multiHandle, nullptr, 0, (int)timeout, &numfds) != CURLM_OK)
+        {
+          CLog::Log(LOGERROR, "CCurlFile::CReadState::{} - ({}) multi_wait failed", __FUNCTION__,
+                    fmt::ptr(this));
+          return FILLBUFFER_FAIL;
+        }
+      }
+      break;
+#else
         int maxfd = -1;
         FD_ZERO(&fdread);
         FD_ZERO(&fdwrite);
@@ -1889,6 +1908,7 @@ int8_t CCurlFile::CReadState::FillBuffer(unsigned int want)
         }
       }
       break;
+#endif
       case CURLM_CALL_MULTI_PERFORM:
       {
         // we don't keep calling here as that can easily overwrite our buffer which we want to avoid
