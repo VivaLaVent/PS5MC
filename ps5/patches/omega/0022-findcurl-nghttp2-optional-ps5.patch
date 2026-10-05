@@ -1,0 +1,30 @@
+From 40cf7a26fd13ea6c89eda287602ff6f3039d9e41 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 19:31:46 +0000
+Subject: [PATCH] ps5(omega): FindCurl - do not link a NOTFOUND nghttp2 when
+ static curl was built without HTTP/2 (Kodi 22 behaviour)
+
+---
+ cmake/modules/FindCurl.cmake | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/cmake/modules/FindCurl.cmake b/cmake/modules/FindCurl.cmake
+index 6411a92915..4c360fbccb 100644
+--- a/cmake/modules/FindCurl.cmake
++++ b/cmake/modules/FindCurl.cmake
+@@ -36,6 +36,12 @@ if(${CURL_LIBRARY} MATCHES ".+\.a$" AND PC_CURL_STATIC_LDFLAGS)
+   pkg_check_modules(PC_NGHTTP2 libnghttp2 QUIET)
+   find_library(NGHTTP2_LIBRARY NAMES libnghttp2 nghttp2
+                                PATHS ${PC_NGHTTP2_LIBDIR})
++  # ps5: a static curl built without HTTP/2 has no nghttp2 to link; Kodi 22
++  # only adds it when curl uses it. Do not propagate a NOTFOUND into the link.
++  if(NOT NGHTTP2_LIBRARY)
++    unset(NGHTTP2_LIBRARY CACHE)
++    set(NGHTTP2_LIBRARY "")
++  endif()
+ endif()
+ 
+ include(FindPackageHandleStandardArgs)
+-- 
+2.43.0
+

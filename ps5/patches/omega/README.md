@@ -14,6 +14,7 @@ apply unchanged; these 8 are the Omega forms, exported from the verified
 
 `tools/migrate-to-fork.sh` prefers a file here over `kodi/` when building `ps5-omega`.
 | 0020 cdio | Kodi 21 requires Cdio unconditionally (22 only with `ENABLE_OPTICAL`); moved under that guard |
+| 0022 findcurl | 21 links `NGHTTP2_LIBRARY` unconditionally when curl is static; ours has no HTTP/2 → NOTFOUND broke generation. Now empty when absent (22 behaviour) |
 | 0021 treedata | `RetroPlayer/shaders/gl` and `posix/filesystem/test` are 22-only directories; dropped from `cmake/treedata/ps5` |
 
 Omega-only build facts (not patches): `lzo2` must be in the sysroot
