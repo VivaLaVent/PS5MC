@@ -10,6 +10,9 @@
 #ifdef TARGET_POSIX
 #include "SoLoader.h"
 #endif
+#if defined(TARGET_PS5)
+#include "platform/ps5/elf/PS5AddonLoader.h"
+#endif
 #ifdef TARGET_WINDOWS
 #include "Win32DllLoader.h"
 #endif
@@ -228,7 +231,11 @@ LibraryLoader* DllLoaderContainer::LoadDll(const char* sName, bool bLoadSymbols)
 #endif
 
   LibraryLoader* pLoader;
-#ifdef TARGET_POSIX
+#if defined(TARGET_PS5)
+  // A PS5 title has no dynamic loader; load binary add-ons in-process. See
+  // platform/ps5/elf/. bLoadSymbols/global scope do not apply.
+  pLoader = new CPS5AddonLoader(sName);
+#elif defined(TARGET_POSIX)
   pLoader = new SoLoader(sName, bLoadSymbols);
 #elif defined(TARGET_WINDOWS)
   pLoader = new Win32DllLoader(sName, false);
