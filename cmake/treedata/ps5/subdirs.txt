@@ -1,0 +1,16 @@
+xbmc/cores/RetroPlayer/shaders/gl   cores/RetroPlayer/shaders/gl
+xbmc/input/touch                    input/touch
+xbmc/input/touch/generic            input/touch/generic
+xbmc/platform/common/speech         platform/common/speech
+xbmc/platform/posix                 platform/posix
+xbmc/platform/posix/filesystem      platform/posix/filesystem
+xbmc/platform/posix/threads         platform/posix/threads
+xbmc/platform/posix/utils           platform/posix/utils
+xbmc/platform/ps5                   platform/ps5
+xbmc/platform/ps5/audio             platform/ps5/audio
+xbmc/platform/ps5/filesystem        platform/ps5/filesystem
+xbmc/platform/ps5/input             platform/ps5/input
+xbmc/platform/ps5/network           platform/ps5/network
+xbmc/platform/ps5/storage           platform/ps5/storage
+xbmc/platform/ps5/video             platform/ps5/video
+xbmc/windowing/ps5                  windowing/ps5
