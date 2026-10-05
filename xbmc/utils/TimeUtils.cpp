@@ -34,7 +34,7 @@ int64_t CurrentHostCounter(void)
   return( (int64_t)PerformanceCount.QuadPart );
 #else
   struct timespec now;
-#if defined(CLOCK_MONOTONIC_RAW) && !defined(TARGET_ANDROID)
+#if defined(CLOCK_MONOTONIC_RAW) && !defined(TARGET_ANDROID) && !defined(TARGET_PS5)
   clock_gettime(CLOCK_MONOTONIC_RAW, &now);
 #else
   clock_gettime(CLOCK_MONOTONIC, &now);
