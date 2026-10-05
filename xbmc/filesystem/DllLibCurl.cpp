@@ -90,6 +90,15 @@ CURLMcode DllLibCurl::multi_timeout(CURLM* multi_handle, long* timeout)
   return curl_multi_timeout(multi_handle, timeout);
 }
 
+CURLMcode DllLibCurl::multi_wait(CURLM* multi_handle,
+                                 struct curl_waitfd extra_fds[],
+                                 unsigned int extra_nfds,
+                                 int timeout_ms,
+                                 int* numfds)
+{
+  return curl_multi_wait(multi_handle, extra_fds, extra_nfds, timeout_ms, numfds);
+}
+
 CURLMsg* DllLibCurl::multi_info_read(CURLM* multi_handle, int* msgs_in_queue)
 {
   return curl_multi_info_read(multi_handle, msgs_in_queue);
