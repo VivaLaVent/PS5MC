@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PS5 defaults (Kodi reads this file from its own tree before the user's
+     advancedsettings.xml, which overrides it). -->
+<advancedsettings version="1.0">
+  <network>
+    <!-- The console's resolver is IPv4-only in a title: without this, curl
+         tries IPv6 first and waits for it before every HTTPS connection. -->
+    <disableipv6>true</disableipv6>
+  </network>
+</advancedsettings>
