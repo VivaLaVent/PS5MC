@@ -195,7 +195,10 @@ cmake -S "$KODI_SRC" -B "$BUILD" -G Ninja \
   -DCMAKE_CXX_FLAGS_RELEASE="-O2 -g -DNDEBUG" \
   -DCMAKE_INSTALL_PREFIX=/app0 \
   -DWITH_TEXTUREPACKER="$NATIVE/bin" \
-  -DWITH_JSONSCHEMABUILDER="$NATIVE/bin" \
+  -DWITH_JSONSCHEMABUILDER="$NATIVE/bin/kodi-JsonSchemaBuilder" \
+  # ^ the binary, not its dir: Kodi 21's find-module strips one path component
+  #   unconditionally (so a dir became its parent -> "not found"); 22's checks
+  #   IS_DIRECTORY first. The binary path satisfies both.
   -DNATIVEPREFIX="$NATIVE" \
   -DPKG_CONFIG_EXECUTABLE="$BUILD/kodi-pkg-config" \
   -DINTERNAL_TEXTUREPACKER_INSTALLABLE=FALSE \
