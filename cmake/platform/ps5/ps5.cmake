@@ -38,6 +38,26 @@ if(NOT TARGET ${_ps5_app_lc}::EGL)
   set(EGL_FOUND TRUE CACHE INTERNAL "")
 endif()
 
+# Kodi 21 (Omega) names the guard targets differently: its FindOpenGl /
+# FindEGL check OpenGL::GL and EGL::EGL, define HAS_GL=1 / HAS_EGL=1, and
+# register the targets on INTERNAL_DEPS_PROP for the link step. Pre-create
+# those too, so the same platform file satisfies both versions; on 22 they are
+# simply unused extra targets.
+if(NOT TARGET OpenGL::GL)
+  add_library(OpenGL::GL INTERFACE IMPORTED)
+  set_target_properties(OpenGL::GL PROPERTIES
+                        INTERFACE_LINK_LIBRARIES PS5OpenGL::OpenGL
+                        INTERFACE_COMPILE_DEFINITIONS HAS_GL=1)
+  set_property(GLOBAL APPEND PROPERTY INTERNAL_DEPS_PROP OpenGL::GL)
+endif()
+if(NOT TARGET EGL::EGL)
+  add_library(EGL::EGL INTERFACE IMPORTED)
+  set_target_properties(EGL::EGL PROPERTIES
+                        INTERFACE_LINK_LIBRARIES PS5OpenGL::OpenGL
+                        INTERFACE_COMPILE_DEFINITIONS "HAS_EGL=1;EGL_NO_X11;MESA_EGL_NO_X11_HEADERS")
+  set_property(GLOBAL APPEND PROPERTY INTERNAL_DEPS_PROP EGL::EGL)
+endif()
+
 unset(_ps5_app_name_line)
 unset(_ps5_app_name)
 unset(_ps5_app_lc)
