@@ -38,6 +38,9 @@
 #endif
 
 #include <locale.h>
+#if defined(TARGET_PS5)
+#include <unistd.h>
+#endif
 #include <memory>
 #include <mutex>
 
@@ -255,6 +258,14 @@ bool CLinuxRendererGL::Configure(const VideoPicture &picture, float fps, unsigne
   }
 
   return true;
+#if defined(TARGET_PS5)
+  // The PS5 GL driver fills textures from a pixel buffer object by reading it
+  // back on the CPU, from write-combined memory: ~23 ms per 1080p plane.
+  // Upload from Kodi's ordinary buffers instead ("kodi-pbo" in the title
+  // folder restores the PBO path for comparison).
+  if (access("/app0/kodi-pbo", F_OK) != 0)
+    m_pboSupported = false;
+#endif
 }
 
 bool CLinuxRendererGL::ConfigChanged(const VideoPicture &picture)
