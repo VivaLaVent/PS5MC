@@ -543,7 +543,24 @@ bool XBPython::OnScriptInitialized(ILanguageInvoker* invoker)
     CHTTPPythonWsgiInvoker::GlobalInitializeModules();
 #endif
 
-    Py_Initialize();
+    // Initialize through the PyConfig API so a failed initialization is reported
+    // as a PyStatus we can log, instead of Py_Initialize()'s Py_ExitStatusException()
+    // which prints to stderr (invisible on some platforms) and exit()s mid-startup.
+    {
+      PyConfig config;
+      PyConfig_InitPythonConfig(&config);
+      PyStatus status = Py_InitializeFromConfig(&config);
+      PyConfig_Clear(&config);
+      if (PyStatus_Exception(status))
+      {
+        CLog::Log(LOGFATAL,
+                  "XBPython: Python initialization failed in {}: {} (exit code {}); Python "
+                  "add-ons are unavailable",
+                  status.func ? status.func : "?",
+                  status.err_msg ? status.err_msg : "<no message>", status.exitcode);
+        return false;
+      }
+    }
 
 #if PY_VERSION_HEX < 0x03070000
     // Python >= 3.7 Py_Initialize implicitly calls PyEval_InitThreads
