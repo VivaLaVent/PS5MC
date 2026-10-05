@@ -25,6 +25,8 @@
 #else
 #include "platform/posix/filesystem/SMBFile.h"
 #endif
+#elif defined(HAS_FILESYSTEM_SMB2)
+#include "platform/ps5/filesystem/SMB2File.h"
 #endif
 #ifdef HAS_OPTICAL_DRIVE
 #include "CDDAFile.h"
@@ -168,6 +170,8 @@ IFile* CFileFactory::CreateLoader(const CURL& url)
 #else
   else if (url.IsProtocol("smb")) return new CSMBFile();
 #endif
+#elif defined(HAS_FILESYSTEM_SMB2)
+  else if (url.IsProtocol("smb")) return new CSMB2File();
 #endif
 #ifdef HAS_FILESYSTEM_NFS
   else if (url.IsProtocol("nfs")) return new CNFSFile();
