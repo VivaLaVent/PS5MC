@@ -36,6 +36,12 @@ if(${CURL_LIBRARY} MATCHES ".+\.a$" AND PC_CURL_STATIC_LDFLAGS)
   pkg_check_modules(PC_NGHTTP2 libnghttp2 QUIET)
   find_library(NGHTTP2_LIBRARY NAMES libnghttp2 nghttp2
                                PATHS ${PC_NGHTTP2_LIBDIR})
+  # ps5: a static curl built without HTTP/2 has no nghttp2 to link; Kodi 22
+  # only adds it when curl uses it. Do not propagate a NOTFOUND into the link.
+  if(NOT NGHTTP2_LIBRARY)
+    unset(NGHTTP2_LIBRARY CACHE)
+    set(NGHTTP2_LIBRARY "")
+  endif()
 endif()
 
 include(FindPackageHandleStandardArgs)
