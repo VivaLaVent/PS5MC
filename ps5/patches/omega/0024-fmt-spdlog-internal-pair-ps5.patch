@@ -1,0 +1,40 @@
+From 74edb3f285ca739d98d4451b4cb35b9b5f1fe230 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 19:37:44 +0000
+Subject: [PATCH] ps5(omega): fmt/spdlog - force the internal version-matched
+ pair on ps5 as on linux/freebsd (sysroot fmt 12 breaks 21's spdlog 1.10)
+
+---
+ cmake/modules/FindFmt.cmake    | 2 +-
+ cmake/modules/FindSpdlog.cmake | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/cmake/modules/FindFmt.cmake b/cmake/modules/FindFmt.cmake
+index 6a3f36eab8..dc6e83478d 100644
+--- a/cmake/modules/FindFmt.cmake
++++ b/cmake/modules/FindFmt.cmake
+@@ -45,7 +45,7 @@ if(NOT TARGET fmt::fmt)
+                    ${${CORE_PLATFORM_NAME_LC}_SEARCH_CONFIG})
+ 
+   if((FMT_VERSION VERSION_LESS ${${MODULE}_VER} AND ENABLE_INTERNAL_FMT) OR
+-     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd) AND ENABLE_INTERNAL_FMT))
++     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd OR CORE_SYSTEM_NAME STREQUAL ps5) AND ENABLE_INTERNAL_FMT))
+     # build internal module
+     buildFmt()
+   else()
+diff --git a/cmake/modules/FindSpdlog.cmake b/cmake/modules/FindSpdlog.cmake
+index a4ff560efa..55467125c9 100644
+--- a/cmake/modules/FindSpdlog.cmake
++++ b/cmake/modules/FindSpdlog.cmake
+@@ -69,7 +69,7 @@ if(NOT TARGET spdlog::spdlog)
+                              ${${CORE_PLATFORM_LC}_SEARCH_CONFIG})
+ 
+   if((SPDLOG_VERSION VERSION_LESS ${${MODULE}_VER} AND ENABLE_INTERNAL_SPDLOG) OR
+-     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd) AND ENABLE_INTERNAL_SPDLOG) OR
++     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd OR CORE_SYSTEM_NAME STREQUAL ps5) AND ENABLE_INTERNAL_SPDLOG) OR
+      LIB_FORCE_REBUILD)
+ 
+     buildSpdlog()
+-- 
+2.43.0
+
