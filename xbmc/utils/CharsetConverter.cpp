@@ -41,6 +41,14 @@
   #define UTF32_CHARSET "UTF-32" ENDIAN_SUFFIX
   #define UTF8_SOURCE "UTF-8"
   #define WCHAR_CHARSET UTF16_CHARSET
+#elif defined(TARGET_PS5)
+  // The PlayStation compiler target has a 16-bit wchar_t (like Windows), so
+  // wide strings are UTF-16 even though the rest of the platform is FreeBSD.
+  #define WCHAR_IS_UTF16 1
+  #define UTF16_CHARSET "UTF-16" ENDIAN_SUFFIX
+  #define UTF32_CHARSET "UTF-32" ENDIAN_SUFFIX
+  #define UTF8_SOURCE "UTF-8"
+  #define WCHAR_CHARSET UTF16_CHARSET
 #elif defined(TARGET_FREEBSD)
   #define WCHAR_IS_UCS_4 1
   #define UTF16_CHARSET "UTF-16" ENDIAN_SUFFIX
