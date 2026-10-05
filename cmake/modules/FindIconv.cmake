@@ -1,42 +1,61 @@
 #.rst:
-# FindICONV
+# FindIconv
 # --------
 # Finds the ICONV library
 #
-# This will define the following target:
+# This will define the following targets:
 #
-#   ICONV::ICONV - The ICONV library
+#   ${APP_NAME_LC}::Iconv - An alias of the Iconv::Iconv target
+#   LIBRARY::Iconv - An alias of the Iconv::Iconv target
+#   Iconv::Iconv - The ICONV library
 
-if(NOT TARGET ICONV::ICONV)
-  find_path(ICONV_INCLUDE_DIR NAMES iconv.h
-                              HINTS ${DEPENDS_PATH}/include
-                              NO_CACHE)
+if(NOT TARGET ${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME})
 
-  find_library(ICONV_LIBRARY NAMES iconv libiconv c
-                             HINTS ${DEPENDS_PATH}/lib
-                             NO_CACHE)
+  # We do this dance to utilise cmake system FindIconv. Saves us dealing with it
+  set(_temp_CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH})
+  unset(CMAKE_MODULE_PATH)
 
-  set(CMAKE_REQUIRED_LIBRARIES ${ICONV_LIBRARY})
-  check_function_exists(iconv HAVE_ICONV_FUNCTION)
-  if(NOT HAVE_ICONV_FUNCTION)
-    check_function_exists(libiconv HAVE_LIBICONV_FUNCTION2)
-    set(HAVE_ICONV_FUNCTION ${HAVE_LIBICONV_FUNCTION2})
-    unset(HAVE_LIBICONV_FUNCTION2)
+  if(Iconv_FIND_REQUIRED)
+    set(ICONV_REQUIRED "REQUIRED")
   endif()
 
-  include(FindPackageHandleStandardArgs)
-  find_package_handle_standard_args(Iconv
-                                    REQUIRED_VARS ICONV_LIBRARY ICONV_INCLUDE_DIR HAVE_ICONV_FUNCTION)
+  if(CORE_SYSTEM_NAME STREQUAL "ps5")
+    # A PS5 title has no iconv in its C library: the SDK's libSceLibcInternal
+    # exports none, and the plain iconv_open a title binds at run time is the
+    # console's system libc, which knows only the Unicode encodings and fails
+    # (EINVAL) on CP437 - the encoding of zip entry names in add-on packages,
+    # and of every legacy subtitle/filename codepage Kodi offers. pacbrew's
+    # GNU libiconv 1.17 (built by scripts/00-setup-wsl.sh, in the SDK sysroot)
+    # handles them all, but CMake's stock FindIconv test-compiles a plain
+    # iconv_open call, which *links* in this cross build, so it concludes iconv
+    # is built into libc (Iconv_IS_BUILT_IN) and links neither the library nor
+    # its header. Force the discovery path instead: GNU libiconv's own
+    # <iconv.h> then renames iconv_open -> libiconv_open, which resolves in
+    # libiconv.a rather than at address 0. No shim, no interposition. NOTE:
+    # pacbrew's libiconv must be built with --enable-extra-encodings
+    # (scripts/21-rebuild-libiconv.sh), or it links fine but has no CP437
+    # converter and iconv_open("UTF-8","CP437") still fails at run time - the
+    # add-on-zip case this whole path exists for.
+    set(Iconv_IS_BUILT_IN OFF CACHE BOOL "iconv is not in the PS5 libc" FORCE)
+  endif()
 
-  if(ICONV_FOUND)
-    # Libc causes grief for linux, so search if found library is libc.* and only
-    # create imported TARGET if its not
-    if(NOT ${ICONV_LIBRARY} MATCHES ".*libc\..*")
-      add_library(ICONV::ICONV UNKNOWN IMPORTED)
-      set_target_properties(ICONV::ICONV PROPERTIES
-                                         IMPORTED_LOCATION "${ICONV_LIBRARY}"
-                                         INTERFACE_INCLUDE_DIRECTORIES "${ICONV_INCLUDE_DIR}")
-      set_property(GLOBAL APPEND PROPERTY INTERNAL_DEPS_PROP ICONV::ICONV)
+  find_package(Iconv ${ICONV_REQUIRED} ${SEARCH_QUIET})
+
+  # Back to our normal module paths
+  set(CMAKE_MODULE_PATH ${_temp_CMAKE_MODULE_PATH})
+
+  if(ICONV_FOUND OR Iconv_FOUND)
+    # We still want to Alias its "standard" target to our APP_NAME_LC based target
+    # for integration into our core dep packaging
+    add_library(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} ALIAS Iconv::Iconv)
+    add_library(LIBRARY::${CMAKE_FIND_PACKAGE_NAME} ALIAS Iconv::Iconv)
+
+    # Required for external searches. Not used internally
+    set(Iconv_FOUND ON CACHE BOOL "Iconv found")
+    mark_as_advanced(Iconv_FOUND)
+  else()
+    if(Iconv_FIND_REQUIRED)
+      message(FATAL_ERROR "Iconv libraries were not found.")
     endif()
   endif()
 endif()
