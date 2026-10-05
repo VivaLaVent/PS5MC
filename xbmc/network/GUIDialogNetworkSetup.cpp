@@ -432,7 +432,7 @@ void CGUIDialogNetworkSetup::Reset()
 void CGUIDialogNetworkSetup::UpdateAvailableProtocols()
 {
   m_protocols.clear();
-#ifdef HAS_FILESYSTEM_SMB
+#if defined(HAS_FILESYSTEM_SMB) || defined(HAS_FILESYSTEM_SMB2)
   // most popular protocol at the first place
   m_protocols.emplace_back(Protocol{true, true, true, false, true, 0, "smb", 20171, ""});
 #endif

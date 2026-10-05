@@ -45,6 +45,8 @@
 #else
 #include "platform/posix/filesystem/SMBDirectory.h"
 #endif
+#elif defined(HAS_FILESYSTEM_SMB2)
+#include "platform/ps5/filesystem/SMB2Directory.h"
 #endif
 #include "CDDADirectory.h"
 #include "PluginDirectory.h"
@@ -196,6 +198,8 @@ IDirectory* CDirectoryFactory::Create(const CURL& url)
 #else
   if (url.IsProtocol("smb")) return new CSMBDirectory();
 #endif
+#elif defined(HAS_FILESYSTEM_SMB2)
+  if (url.IsProtocol("smb")) return new CSMB2Directory();
 #endif
 #ifdef HAS_UPNP
   if (url.IsProtocol("upnp")) return new CUPnPDirectory();
