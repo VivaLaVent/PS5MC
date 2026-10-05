@@ -1,4 +1,17 @@
-# Build / deploy / test workflow
+# Build / deploy / test workflow (PS5MC fork)
+
+**Two builds, always.** Kodi 22 (`ps5mc-piers`, title PPSA99420, "PS5MC") and
+Kodi 21 (`ps5mc-omega`, title PPSA99421, "PS5MC (Kodi 21)"). Each has its own
+build dir (`~/ps5mc-build-22|21`) and stage dir (`~/ps5mc-stage-22|21`).
+`ps5/scripts/40-release.sh <ver>` builds both, verifies each artifact, zips
+them as `PS5MC-<ver>-kodi22-PPSA99420.zip` / `PS5MC-<ver>-kodi21-PPSA99421.zip`
+and publishes one GitHub release with both. `--no-publish` to just build;
+`ONLY=22` (or 21) to iterate on one variant. A missing variant aborts: it is
+two zips or nothing.
+
+The repo paths below say `/mnt/c/kodi-ps5`; in the fork era read `~/PS5MC`
+and `ps5/scripts/...`. The console facts are unchanged.
+
 
 The loop we use every round. Following it exactly is what keeps us from the two
 failure modes that have cost whole builds: testing a **stale zip** (an older
