@@ -48,6 +48,11 @@ if(NOT TARGET LibDvdNav::LibDvdNav)
     elseif(ARCH STREQUAL x86_64)
       set(HOST_ARCH x86_64-linux-android)
     endif()
+  elseif(CORE_SYSTEM_NAME STREQUAL ps5)
+    # ps5: ARCH is x86_64-ps5, which autoconf's config.sub rejects. The console
+    # is FreeBSD-derived and CC is already the cross clang, so give configure
+    # a triple it knows; --host only sets its assumptions, not the compiler.
+    set(HOST_ARCH x86_64-unknown-freebsd)
   elseif(CORE_SYSTEM_NAME STREQUAL windowsstore)
     set(LIBDVD_ADDITIONAL_ARGS "-DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}" "-DCMAKE_SYSTEM_VERSION=${CMAKE_SYSTEM_VERSION}")
   endif()
