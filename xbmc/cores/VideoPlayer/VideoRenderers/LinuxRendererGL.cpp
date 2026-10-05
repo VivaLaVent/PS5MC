@@ -264,6 +264,12 @@ bool CLinuxRendererGL::Configure(const VideoPicture &picture, float fps, unsigne
   // folder restores the PBO path for comparison).
   if (access("/app0/kodi-pbo", F_OK) != 0)
     m_pboSupported = false;
+  // The driver keeps 2D R8/RG8 textures that can also be render targets in
+  // its tiled layout and converts every upload pixel by pixel (~23 ms per
+  // 1080p plane). Rectangle textures are always linear: uploads are row
+  // copies. "kodi-tex2d" in the title folder restores 2D textures.
+  if (access("/app0/kodi-tex2d", F_OK) != 0)
+    m_textureTarget = GL_TEXTURE_RECTANGLE;
 #endif
 
   if (!CServiceBroker::GetWinSystem()->SetVideoOutput(&picture))
