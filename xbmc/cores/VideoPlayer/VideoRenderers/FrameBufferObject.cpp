@@ -14,6 +14,16 @@
 #include "utils/GLUtils.h"
 #include "utils/log.h"
 
+// The "default" framebuffer: 0, except on the PS5 while HDR output is active,
+// where Kodi's frame is rendered into a 10-bit intermediate target that a final
+// pass packs for the HDR scanout (xbmc/windowing/ps5/HdrOutputPS5.cpp).
+#if defined(TARGET_PS5)
+#include "windowing/ps5/DefaultFramebufferPS5.h"
+#define KODI_DEFAULT_FRAMEBUFFER KODI::PLATFORM::PS5::DefaultFramebuffer()
+#else
+#define KODI_DEFAULT_FRAMEBUFFER 0
+#endif
+
 //////////////////////////////////////////////////////////////////////
 // CFrameBufferObject
 //////////////////////////////////////////////////////////////////////
@@ -96,7 +106,7 @@ bool CFrameBufferObject::CreateAndBindToTexture(GLenum target, int width, int he
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target, m_texid, 0);
   VerifyGLState();
   GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, KODI_DEFAULT_FRAMEBUFFER);
   if (status != GL_FRAMEBUFFER_COMPLETE)
   {
     VerifyGLState();
@@ -122,7 +132,7 @@ bool CFrameBufferObject::AttachDepthBuffer(int width, int height)
   glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthBuffer);
   const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, KODI_DEFAULT_FRAMEBUFFER);
 
   if (status != GL_FRAMEBUFFER_COMPLETE)
   {
@@ -155,5 +165,5 @@ bool CFrameBufferObject::BeginRender()
 void CFrameBufferObject::EndRender() const
 {
   if (IsValid())
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, KODI_DEFAULT_FRAMEBUFFER);
 }
