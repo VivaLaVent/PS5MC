@@ -14,6 +14,7 @@ apply unchanged; these 8 are the Omega forms, exported from the verified
 
 `tools/migrate-to-fork.sh` prefers a file here over `kodi/` when building `ps5-omega`.
 | 0020 cdio | Kodi 21 requires Cdio unconditionally (22 only with `ENABLE_OPTICAL`); moved under that guard |
+| 0025 spdlog fmt_DIR | spdlog's sub-build finds fmt via `CMAKE_PREFIX_PATH`, which is re-rooted under the sysroot when cross-compiling, so it got fmt 12 even with internal 9.1 built; `fmt_DIR` names the config dir and is not re-rooted (latent on 22, masked by matching versions) |
 | 0024 fmt/spdlog | 21 pins fmt 9.1 + spdlog 1.10; the sysroot's fmt 12 satisfies 21's ≥9.1 check but breaks spdlog 1.10 (`fmt::basic_runtime` gone in fmt 10). ps5 now forces the internal pair, as upstream does on linux/freebsd |
 | 0023 libdvd | 21 builds libdvdread/nav/css with autotools and `--host=x86_64-ps5`, which `config.sub` rejects (22 uses meson); ps5 maps to `x86_64-unknown-freebsd` |
 | 0022 findcurl | 21 links `NGHTTP2_LIBRARY` unconditionally when curl is static; ours has no HTTP/2 → NOTFOUND broke generation. Now empty when absent (22 behaviour) |
