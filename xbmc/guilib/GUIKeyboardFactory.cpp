@@ -27,6 +27,10 @@
 #include "platform/darwin/ios-common/DarwinEmbedKeyboard.h"
 #endif
 
+#if defined(TARGET_PS5)
+#include "platform/ps5/input/PS5Keyboard.h"
+#endif
+
 using namespace KODI::MESSAGING;
 using KODI::UTILITY::CDigest;
 
@@ -81,6 +85,10 @@ bool CGUIKeyboardFactory::ShowAndGetInput(std::string& aTextString,
                                           unsigned int autoCloseMs /* = 0 */)
 {
   bool confirmed = false;
+#if defined(TARGET_PS5)
+  if (g_activeKeyboard)
+    return false;
+#endif
   //heading can be a string or a localization id
   std::string headingStr;
   if (heading.isString())
@@ -99,6 +107,21 @@ bool CGUIKeyboardFactory::ShowAndGetInput(std::string& aTextString,
 #endif
 
   auto& winManager = CServiceBroker::GetGUI()->GetWindowManager();
+#if defined(TARGET_PS5)
+  auto* nativeKeyboard =
+      winManager.GetWindow<KODI::PLATFORM::PS5::CPS5Keyboard>(WINDOW_DIALOG_KEYBOARD_TOUCH);
+  if (nativeKeyboard)
+  {
+    g_activeKeyboard = nativeKeyboard;
+    nativeKeyboard->startAutoCloseTimer(autoCloseMs);
+    confirmed = nativeKeyboard->ShowAndGetInput(keyTypedCB, aTextString, aTextString,
+                                               headingStr, hiddenInput);
+    g_activeKeyboard = nullptr;
+    if (!nativeKeyboard->NativeUnavailable())
+      return confirmed && (allowEmptyResult || !aTextString.empty());
+  }
+#endif
+
   CGUIKeyboard* kb = nullptr;
   if (useKodiKeyboard)
     kb = winManager.GetWindow<CGUIDialogKeyboardGeneric>(WINDOW_DIALOG_KEYBOARD);

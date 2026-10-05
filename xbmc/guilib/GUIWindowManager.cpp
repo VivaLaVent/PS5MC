@@ -88,7 +88,11 @@
 #include "dialogs/GUIDialogGamepad.h"
 #include "dialogs/GUIDialogKaiToast.h"
 #include "dialogs/GUIDialogKeyboardGeneric.h"
+#if defined(TARGET_PS5)
+#include "platform/ps5/input/PS5Keyboard.h"
+#else
 #include "dialogs/GUIDialogKeyboardTouch.h"
+#endif
 #include "dialogs/GUIDialogNumeric.h"
 #include "dialogs/GUIDialogOK.h"
 #include "dialogs/GUIDialogPlayerControls.h"
@@ -205,7 +209,11 @@ void CGUIWindowManager::CreateWindows()
   Add(new CGUIDialogProgress);
   Add(new CGUIDialogExtendedProgressBar);
   Add(new CGUIDialogKeyboardGeneric);
+#if defined(TARGET_PS5)
+  Add(new KODI::PLATFORM::PS5::CPS5Keyboard);
+#else
   Add(new CGUIDialogKeyboardTouch);
+#endif
   Add(new CGUIDialogVolumeBar);
   Add(new CGUIDialogSeekBar);
   Add(new CGUIDialogSubMenu);
