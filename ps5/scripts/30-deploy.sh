@@ -17,6 +17,7 @@
 #   STAGE       staging dir              default ~/kodi-ps5-stage
 #   APP_TEMPLATE demo app dir            default ~/ps5-work/ps5-opengl/build/native-app/PPSA99005
 #   TITLE_ID    default PPSA99420        HEAP_MIB app malloc heap (default 2048)
+#   TITLE_NAME  default PS5MC            on-screen title name
 #   KODI_CATEGORY  game (default) or media: home-screen area (media is
 #               experimental: the GL driver does not start in its sandbox)
 #   PS5_HOST    console IP for FTP upload (optional)
@@ -30,6 +31,7 @@ STAGE="${STAGE:-$HOME/kodi-ps5-stage}"
 WORK="${WORK:-$HOME/ps5-work}"
 APP_TEMPLATE="${APP_TEMPLATE:-$WORK/ps5-opengl/build/native-app/PPSA99005}"
 TITLE_ID="${TITLE_ID:-PPSA99420}"
+TITLE_NAME="${TITLE_NAME:-PS5MC}"   # on-screen name; the 21 build uses "PS5MC (Kodi 21)"
 HEAP_MIB="${HEAP_MIB:-2048}"
 HB="$PS5_PAYLOAD_SDK/target/user/homebrew"
 LLD="$PS5_PAYLOAD_SDK/bin/prospero-lld"
@@ -212,9 +214,9 @@ BUILTINS="$(clang-18 --print-resource-dir)/lib/linux/libclang_rt.builtins-x86_64
 printf 'APP_STATIC_ARCHIVES = vendor/libkodi_group.a\n' > "$APP/.env"
 
 echo "==> 4. title metadata"
-python3 - "$APP/sce_sys/param.json" "$TITLE_ID" <<'PY'
+python3 - "$APP/sce_sys/param.json" "$TITLE_ID" "$TITLE_NAME" <<'PY'
 import json, os, sys
-path, tid = sys.argv[1], sys.argv[2]
+path, tid, tname = sys.argv[1], sys.argv[2], sys.argv[3]
 p = json.load(open(path))
 p["titleId"] = tid
 p["conceptId"] = tid[4:]
@@ -259,12 +261,12 @@ else:
     p["contentBadgeType"] = 1
     p["gameIntent"] = {"permittedIntents": [{"intentType": "launchActivity"}]}
 lp = p.setdefault("localizedParameters", {"defaultLanguage": "en-US"})
-lp.setdefault("en-US", {})["titleName"] = "Kodi"
+lp.setdefault("en-US", {})["titleName"] = tname
 # The save-data entry (Settings > Storage > Saved Data) inherits the title
 # name and icon0 above, so /download0 shows as "Kodi" with the Kodi icon. Make
 # that explicit so a data manager that reads its own field labels it clearly.
 sd = p.setdefault("saveDataInfo", {})
-sd["title"] = "Kodi"
+sd["title"] = tname
 sd["subtitle"] = "Settings, add-ons and library"
 sd["detail"] = "Kodi configuration, installed add-ons and media library"
 json.dump(p, open(path, "w"), indent=2)
