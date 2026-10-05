@@ -64,8 +64,11 @@ if [ "$MODE" = fork ]; then
   STAMP_H="$KODI_SRC/xbmc/platform/ps5/BuildStamp.h"
   if [ -f "$STAMP_H" ]; then
     sed -i "s/#define KODI_PS5_BUILD_STAMP \"[^\"]*\"/#define KODI_PS5_BUILD_STAMP \"$STAMP\"/" "$STAMP_H"
-    # the stamp edit must not dirty the tree for the next provenance check
+    # The stamp edit is a working-tree change that must never be committed or
+    # trip a clean-tree check: hide it from git while this script runs and
+    # restore the committed file on ANY exit (failed configure included).
     git -C "$KODI_SRC" update-index --assume-unchanged "xbmc/platform/ps5/BuildStamp.h" 2>/dev/null || true
+    trap 'git -C "$KODI_SRC" update-index --no-assume-unchanged xbmc/platform/ps5/BuildStamp.h 2>/dev/null; git -C "$KODI_SRC" checkout -q -- xbmc/platform/ps5/BuildStamp.h 2>/dev/null' EXIT
     echo "==> build stamp: $STAMP"
   fi
   echo "==> Kodi series: $(git -C "$KODI_SRC" log --oneline | grep -c '^[0-9a-f]* ps5') ps5 commits on $KODI_BRANCH"
@@ -194,11 +197,11 @@ cmake -S "$KODI_SRC" -B "$BUILD" -G Ninja \
   -DCMAKE_C_FLAGS_RELEASE="-O2 -g -DNDEBUG" \
   -DCMAKE_CXX_FLAGS_RELEASE="-O2 -g -DNDEBUG" \
   -DCMAKE_INSTALL_PREFIX=/app0 \
-  -DWITH_TEXTUREPACKER="$NATIVE/bin" \
+  -DWITH_TEXTUREPACKER="$NATIVE/bin/kodi-TexturePacker" \
   -DWITH_JSONSCHEMABUILDER="$NATIVE/bin/kodi-JsonSchemaBuilder" \
-  # ^ the binary, not its dir: Kodi 21's find-module strips one path component
-  #   unconditionally (so a dir became its parent -> "not found"); 22's checks
-  #   IS_DIRECTORY first. The binary path satisfies both.
+  # ^ both host tools as BINARY paths, not their dir: Kodi 21's find-modules
+  #   strip one path component unconditionally (a dir became its parent ->
+  #   "not found"); 22's check IS_DIRECTORY first. The binary path satisfies both.
   -DNATIVEPREFIX="$NATIVE" \
   -DPKG_CONFIG_EXECUTABLE="$BUILD/kodi-pkg-config" \
   -DINTERNAL_TEXTUREPACKER_INSTALLABLE=FALSE \
