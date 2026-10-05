@@ -41,6 +41,8 @@ for v in "${VARIANTS[@]}"; do
   [ -n "$ONLY" ] && [ "$ONLY" != "${name#kodi}" ] && { echo "==> skipping $name (ONLY=$ONLY)"; continue; }
   echo "################ $name: $branch -> $tid \"$tname\""
   git checkout -q "$branch" || { echo "!! cannot check out $branch"; exit 1; }
+  # Kodi 21 needs lzo2 in the sysroot (no internal build on 21); idempotent.
+  [ "$name" = kodi21 ] && { bash "$SCRIPTS/22-build-kodi21-deps.sh" > "$OUT/$name-deps.log" 2>&1 || { echo "!! $name: sysroot deps failed - see $OUT/$name-deps.log"; grep '!!' "$OUT/$name-deps.log"; exit 1; }; }
   # configure + build + deploy, each variant fully isolated
   KODI_SRC="$FORK" BUILD="$bdir" bash "$SCRIPTS/20-configure-kodi.sh" > "$OUT/$name-configure.log" 2>&1 \
     || { echo "!! $name: configure failed - see $OUT/$name-configure.log"; grep -E '!!' "$OUT/$name-configure.log"; exit 1; }
