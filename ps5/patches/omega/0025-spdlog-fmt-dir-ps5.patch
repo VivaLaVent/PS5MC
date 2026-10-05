@@ -1,0 +1,32 @@
+From f01ad9d10e5030021f2008d963216aea2e806dd3 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 19:41:08 +0000
+Subject: [PATCH] ps5(omega): spdlog sub-build - pass fmt_DIR so it links the
+ internal fmt 9.1, not the sysroot's fmt 12 (prefix path is re-rooted when
+ cross-compiling)
+
+---
+ cmake/modules/FindSpdlog.cmake | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/cmake/modules/FindSpdlog.cmake b/cmake/modules/FindSpdlog.cmake
+index 55467125c9..a3b8288833 100644
+--- a/cmake/modules/FindSpdlog.cmake
++++ b/cmake/modules/FindSpdlog.cmake
+@@ -32,6 +32,13 @@ macro(buildSpdlog)
+                  -DSPDLOG_BUILD_TESTS=OFF
+                  -DSPDLOG_BUILD_BENCH=OFF
+                  -DSPDLOG_FMT_EXTERNAL=ON
++                 # ps5: the sub-build's find_package(fmt) must use the internal
++                 # (version-matched) fmt. CMAKE_PREFIX_PATH is re-rooted under
++                 # the sysroot when cross-compiling, so the depends dir does not
++                 # resolve and the sysroot's fmt 12 wins (spdlog 1.10 needs 9).
++                 # fmt_DIR names the config dir directly and is not re-rooted;
++                 # the internal fmt is a declared dependency, so it exists by then.
++                 -Dfmt_DIR=${DEPENDS_PATH}/lib/cmake/fmt
+                  ${EXTRA_ARGS})
+ 
+   # Set definitions that will be set in the built cmake config file
+-- 
+2.43.0
+
