@@ -201,6 +201,12 @@ if [ "${KODI_PS5_CCACHE:-0}" = 1 ] && command -v ccache >/dev/null; then
   echo "==> ccache enabled ($(ccache -s 2>/dev/null | grep -iE 'hit rate|cache size' | head -1 | xargs))"
 fi
 
+# NOTE: no comment lines inside the backslash-continued cmake command below -
+# a '#' line ends the command and silently drops every argument after it
+# (that bit us: the Python args vanished and configure "passed" without them).
+# Host tools are passed as BINARY paths, not their dir: Kodi 21's find-modules
+# strip one path component unconditionally (a dir became its parent ->
+# "not found"); 22's check IS_DIRECTORY first. The binary path satisfies both.
 cmake -S "$KODI_SRC" -B "$BUILD" -G Ninja \
   -U "FFMPEG_*" -U "Python3_*" -U "PYTHON_*" \
   -DCMAKE_TOOLCHAIN_FILE="$HERE/toolchain/ps5-kodi.cmake" \
@@ -210,9 +216,6 @@ cmake -S "$KODI_SRC" -B "$BUILD" -G Ninja \
   -DCMAKE_INSTALL_PREFIX=/app0 \
   -DWITH_TEXTUREPACKER="$NATIVE/bin/TexturePacker" \
   -DWITH_JSONSCHEMABUILDER="$NATIVE/bin/JsonSchemaBuilder" \
-  # ^ both host tools as BINARY paths, not their dir: Kodi 21's find-modules
-  #   strip one path component unconditionally (a dir became its parent ->
-  #   "not found"); 22's check IS_DIRECTORY first. The binary path satisfies both.
   -DNATIVEPREFIX="$NATIVE" \
   -DPKG_CONFIG_EXECUTABLE="$BUILD/kodi-pkg-config" \
   -DINTERNAL_TEXTUREPACKER_INSTALLABLE=FALSE \
