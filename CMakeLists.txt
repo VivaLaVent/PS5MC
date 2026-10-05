@@ -200,7 +200,6 @@ core_require_dep(${required_buildtools})
 
 # Required dependencies. Keep in alphabetical order please
 set(required_deps ASS>=0.15.0
-                  Cdio
                   CrossGUID
                   Curl
                   FFMPEG
@@ -280,6 +279,10 @@ if(ENABLE_UPNP)
 endif()
 
 if(ENABLE_OPTICAL)
+  # ps5: Cdio only with optical support (as upstream Kodi 22 does); every cdio
+  # user in the tree is already gated by HAS_OPTICAL_DRIVE / ENABLE_OPTICAL,
+  # only this dependency declaration was unconditional.
+  core_require_dep(Cdio)
   list(APPEND DEP_DEFINES -DHAS_OPTICAL_DRIVE -DHAS_CDDA_RIPPER)
 endif()
 
