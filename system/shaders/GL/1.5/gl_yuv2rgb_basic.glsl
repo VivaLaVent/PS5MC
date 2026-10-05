@@ -119,6 +119,10 @@ vec4 process()
 
 #endif
 
+#if defined(KODI_HLG_TO_PQ)
+  rgb.rgb = hlgToPq(rgb.rgb);
+#endif
+
 #if defined(KODI_GAMMA_LINEARIZATION_FAST)
   rgb.rgb = sqrt(rgb.rgb);
 #endif
