@@ -97,7 +97,7 @@ else()
                       Neptune/Source/System/Win32/NptWin32Time.cpp)
 endif()
 
-if(CORE_SYSTEM_NAME STREQUAL "freebsd")
+if(CORE_SYSTEM_NAME STREQUAL "freebsd" OR CORE_SYSTEM_NAME STREQUAL "ps5")
   list(APPEND SOURCES Neptune/Source/System/Bsd/NptBsdResolver.cpp
                       Neptune/Source/System/Bsd/NptBsdSockets.cpp)
 endif()
@@ -105,7 +105,7 @@ endif()
 
 add_library(upnp STATIC ${SOURCES} ${HEADERS})
 target_compile_definitions(upnp PUBLIC -DNPT_CONFIG_ENABLE_LOGGING)
-if(CORE_SYSTEM_NAME STREQUAL "freebsd")
+if(CORE_SYSTEM_NAME STREQUAL "freebsd" OR CORE_SYSTEM_NAME STREQUAL "ps5")
   target_compile_definitions(upnp PUBLIC -DNPT_CONFIG_HAVE_GETADDRINFO)
 endif()
 
