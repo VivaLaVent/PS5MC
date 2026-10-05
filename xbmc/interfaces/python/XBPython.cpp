@@ -69,7 +69,25 @@ XBPython::XBPython()
   CHTTPPythonWsgiInvoker::GlobalInitializeModules();
 #endif
 
-  Py_Initialize();
+  // Initialize through the PyConfig API so a failed initialization is reported
+  // as a PyStatus we can log, instead of Py_Initialize()'s Py_ExitStatusException()
+  // which prints to stderr (invisible on some platforms) and exit()s mid-startup.
+  {
+    PyConfig config;
+    PyConfig_InitPythonConfig(&config);
+    PyStatus status = Py_InitializeFromConfig(&config);
+    PyConfig_Clear(&config);
+    if (PyStatus_Exception(status))
+    {
+      CLog::Log(LOGFATAL,
+                "XBPython: Python initialization failed in {}: {} (exit code {}); Python add-ons "
+                "are unavailable",
+                status.func ? status.func : "?",
+                status.err_msg ? status.err_msg : "<no message>", status.exitcode);
+      m_bindingModulesLoaded = false;
+      return;
+    }
+  }
 
   // a module adopts types shared with the others only on its first init, so
   // init them together here rather than in whichever sub-interpreter a script
