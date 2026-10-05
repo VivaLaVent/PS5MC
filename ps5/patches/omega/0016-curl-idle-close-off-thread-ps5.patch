@@ -1,0 +1,147 @@
+From f80a03281b9643bc2af4560ebfeb3a4c1fcdcfd7 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 14:32:27 +0000
+Subject: [PATCH] ps5(omega): 0016 curl-idle-close-off-thread (ported: Omega
+ spells std::unique_lock<CCriticalSection>)
+
+---
+ xbmc/filesystem/DllLibCurl.cpp | 107 ++++++++++++++++++++++++++-------
+ 1 file changed, 85 insertions(+), 22 deletions(-)
+
+diff --git a/xbmc/filesystem/DllLibCurl.cpp b/xbmc/filesystem/DllLibCurl.cpp
+index f751c4558a..712bcd1dd0 100644
+--- a/xbmc/filesystem/DllLibCurl.cpp
++++ b/xbmc/filesystem/DllLibCurl.cpp
+@@ -8,7 +8,10 @@
+ 
+ #include "DllLibCurl.h"
+ 
++#include "ServiceBroker.h"
+ #include "threads/SystemClock.h"
++#include "jobs/Job.h"
++#include "jobs/JobManager.h"
+ #include "utils/log.h"
+ 
+ #include <assert.h>
+@@ -145,36 +148,96 @@ DllLibCurlGlobal::~DllLibCurlGlobal()
+   curl_global_cleanup();
+ }
+ 
++namespace
++{
++// Tearing down an idle curl session (multi_remove_handle / easy_cleanup /
++// multi_cleanup) can block for a long time - a keep-alive HTTPS connection to
++// a slow mirror can sit in TLS/socket shutdown until curl's timeout (tens of
++// seconds). CheckIdle() runs on the application thread (CApplication::
++// ProcessSlow, every ~500 ms), and previously did this teardown while holding
++// m_critSection, so one stuck close froze the GUI for the whole timeout and
++// blocked every other curl transfer waiting on the lock. The sessions to close
++// are now spliced out of the live pool under the lock (fast) and their teardown
++// is done here, off the application thread. Each closed session was already
++// idle and not busy, so no other thread references its handles.
++void CloseSessions(DllLibCurlGlobal& curl, const std::vector<DllLibCurlGlobal::SSession>& sessions)
++{
++  for (const auto& s : sessions)
++  {
++    if (s.m_multi && s.m_easy)
++      curl.multi_remove_handle(s.m_multi, s.m_easy);
++    if (s.m_easy)
++      curl.easy_cleanup(s.m_easy);
++    if (s.m_multi)
++      curl.multi_cleanup(s.m_multi);
++  }
++}
++
++class CCurlCloseJob : public CJob
++{
++public:
++  // Takes its own copy of the session list: CJobManager::AddJob deletes the
++  // job when it cannot queue it (shutdown) and may return before the caller
++  // can tell, so the caller keeps the original list and must stay able to
++  // close the handles itself. SSession destruction never touches the handles,
++  // so whichever copy goes unused is destroyed without effect.
++  CCurlCloseJob(const std::vector<DllLibCurlGlobal::SSession>& sessions, DllLibCurlGlobal* owner)
++    : m_sessions(sessions), m_owner(owner)
++  {
++  }
++
++  const char* GetType() const override { return "curl-close"; }
++
++  bool DoWork() override
++  {
++    CloseSessions(*m_owner, m_sessions);
++    return true;
++  }
++
++private:
++  std::vector<DllLibCurlGlobal::SSession> m_sessions;
++  DllLibCurlGlobal* m_owner;
++};
++} // namespace
++
+ void DllLibCurlGlobal::CheckIdle()
+ {
+-  std::unique_lock<CCriticalSection> lock(m_critSection);
+-  /* 20 seconds idle time before closing handle */
++  /* 30 seconds idle time before closing handle */
+   const unsigned int idletime = 30000;
+ 
+-  VEC_CURLSESSIONS::iterator it = m_sessions.begin();
+-  while (it != m_sessions.end())
++  std::vector<SSession> expired;
+   {
+-    auto now = std::chrono::steady_clock::now();
+-    auto duration =
+-        std::chrono::duration_cast<std::chrono::milliseconds>(now - it->m_idletimestamp);
+-
+-    if (!it->m_busy && duration.count() > idletime)
++    std::unique_lock lock(m_critSection);
++    VEC_CURLSESSIONS::iterator it = m_sessions.begin();
++    while (it != m_sessions.end())
+     {
+-      CLog::Log(LOGDEBUG, "{} - Closing session to {}://{} (easy={}, multi={})", __FUNCTION__,
+-                it->m_protocol, it->m_hostname, fmt::ptr(it->m_easy), fmt::ptr(it->m_multi));
+-
+-      if (it->m_multi && it->m_easy)
+-        multi_remove_handle(it->m_multi, it->m_easy);
+-      if (it->m_easy)
+-        easy_cleanup(it->m_easy);
+-      if (it->m_multi)
+-        multi_cleanup(it->m_multi);
+-
+-      it = m_sessions.erase(it);
+-      continue;
++      auto now = std::chrono::steady_clock::now();
++      auto duration =
++          std::chrono::duration_cast<std::chrono::milliseconds>(now - it->m_idletimestamp);
++
++      if (!it->m_busy && duration.count() > idletime)
++      {
++        CLog::Log(LOGDEBUG, "{} - Closing session to {}://{} (easy={}, multi={})", __FUNCTION__,
++                  it->m_protocol, it->m_hostname, fmt::ptr(it->m_easy), fmt::ptr(it->m_multi));
++        expired.push_back(*it);      // hand the handles to the background closer
++        it = m_sessions.erase(it);   // remove from the live pool immediately
++        continue;
++      }
++      ++it;
+     }
+-    ++it;
+   }
++
++  if (expired.empty())
++    return;
++
++  // Defer the potentially-blocking teardown off the application thread. AddJob
++  // deletes the job and returns 0 when it cannot queue it (shutdown; 0 is
++  // never a valid job id), so the job must not be touched afterwards: it got a
++  // copy of the list, and on failure the teardown runs inline from ours so the
++  // handles are not leaked.
++  if (CServiceBroker::GetJobManager()->AddJob(new CCurlCloseJob(expired, this), nullptr,
++                                              CJob::PRIORITY_LOW) == 0)
++    CloseSessions(*this, expired);
+ }
+ 
+ void DllLibCurlGlobal::easy_acquire(const char* protocol,
+-- 
+2.43.0
+

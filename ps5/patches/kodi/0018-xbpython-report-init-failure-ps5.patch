@@ -1,0 +1,44 @@
+ps5: report a failed Python initialization instead of exiting.
+
+XBPython called Py_Initialize(), which on any initialization failure calls
+Py_ExitStatusException(): the reason is written to stderr and the process
+exit()s in the middle of Kodi's startup. On the PS5 title stderr goes nowhere
+(fileno(stderr) is not 2 in the clean-room libc, so even a write() tee misses
+it), and exit() mid-startup runs static destructors on half-initialized
+services and crashes - so a Python init failure showed up only as an
+unexplained SIGSEGV in ~CServiceBroker.
+
+Initialize through Py_InitializeFromConfig() instead and log the PyStatus
+(function + message) with CLog, which reaches klog on every platform, then
+return with the interpreter uninitialized: Kodi continues without Python
+add-ons and the log names the actual failure. The destructor is already
+guarded by Py_IsInitialized().
+--- a/xbmc/interfaces/python/XBPython.cpp
++++ b/xbmc/interfaces/python/XBPython.cpp
+@@ -69,7 +69,25 @@ XBPython::XBPython()
+   CHTTPPythonWsgiInvoker::GlobalInitializeModules();
+ #endif
+ 
+-  Py_Initialize();
++  // Initialize through the PyConfig API so a failed initialization is reported
++  // as a PyStatus we can log, instead of Py_Initialize()'s Py_ExitStatusException()
++  // which prints to stderr (invisible on some platforms) and exit()s mid-startup.
++  {
++    PyConfig config;
++    PyConfig_InitPythonConfig(&config);
++    PyStatus status = Py_InitializeFromConfig(&config);
++    PyConfig_Clear(&config);
++    if (PyStatus_Exception(status))
++    {
++      CLog::Log(LOGFATAL,
++                "XBPython: Python initialization failed in {}: {} (exit code {}); Python add-ons "
++                "are unavailable",
++                status.func ? status.func : "?",
++                status.err_msg ? status.err_msg : "<no message>", status.exitcode);
++      m_bindingModulesLoaded = false;
++      return;
++    }
++  }
+ 
+   // a module adopts types shared with the others only on its first init, so
+   // init them together here rather than in whichever sub-interpreter a script

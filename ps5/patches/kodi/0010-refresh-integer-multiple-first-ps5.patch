@@ -1,0 +1,94 @@
+ps5: refresh-rate selection by the lowest integer multiple of the frame rate
+(1x first) at the desktop size, right after Kodi's first pass (replaces 0009's
+later pass, so 1080p and 2160p videos choose alike); without a fit, the system
+rate.
+
+--- a/xbmc/windowing/Resolution.cpp	2026-09-26 09:17:00.002132413 +0000
++++ b/xbmc/windowing/Resolution.cpp	2026-09-26 09:17:27.229332349 +0000
+@@ -140,6 +140,47 @@
+   if (!found)
+     CLog::Log(LOGDEBUG, "[WHITELIST] No match for an exact resolution with an exact refresh rate");
+ 
++#if defined(TARGET_PS5)
++  // PS5: every output mode has the desktop (GUI) size; the refresh rates are
++  // the system rate (59.94 Hz) and, if available, 119.88 Hz. Pick the lowest
++  // integer multiple of the frame rate that a mode offers - the exact rate
++  // first, then 2x, 3x ... - so a higher rate (120 Hz) is used only when no
++  // lower one gives an even cadence (23.976/24 fps). Done here, before Kodi's
++  // own passes, so 1080p and 2160p videos choose alike (the 3:2 pulldown pass
++  // would otherwise take 59.94 Hz for a 2160p 24p film). Within 0.15%: 24.000
++  // fps takes 119.88 Hz and 60.000 fps 59.94 Hz ("Sync playback to display",
++  // when on, absorbs the 0.1%; the output rate never depends on it).
++  {
++    const RESOLUTION_INFO desktop =
++        CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo(RES_DESKTOP);
++    CLog::Log(LOGDEBUG,
++              "[WHITELIST] Searching for a desktop-size mode at an integer multiple of {} fps", fps);
++    for (int multiple = 1; multiple <= 5; ++multiple)
++    {
++      for (const auto& mode : indexList)
++      {
++        auto i = CDisplaySettings::GetInstance().GetResFromString(mode.asString());
++        const RESOLUTION_INFO info = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo(i);
++        if (info.iScreenWidth == desktop.iScreenWidth &&
++            info.iScreenHeight == desktop.iScreenHeight &&
++            (info.dwFlags & D3DPRESENTFLAG_MODEMASK) == (curr.dwFlags & D3DPRESENTFLAG_MODEMASK) &&
++            MathUtils::FloatEquals(info.fRefreshRate, fps * multiple, 0.0015f * info.fRefreshRate))
++        {
++          CLog::Log(LOGINFO, "[WHITELIST] Matched {}x the frame rate: {} ({})", multiple,
++                    info.strMode, i);
++          resolution = i;
++          return;
++        }
++      }
++    }
++    // no even cadence available (e.g. 25 fps): stay at the system rate
++    CLog::Log(LOGINFO, "[WHITELIST] No mode at an integer multiple of {} fps: keeping the "
++              "system rate {}", fps, desktop.strMode);
++    resolution = RES_DESKTOP;
++    return;
++  }
++#endif
++
+   if (noWhiteList || CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+           SETTING_VIDEOSCREEN_WHITELIST_DOUBLEREFRESHRATE))
+   {
+@@ -243,38 +284,6 @@
+ 
+   CLog::Log(LOGDEBUG, "[WHITELIST] No match for a desktop resolution with an exact refresh rate");
+ 
+-#if defined(TARGET_PS5)
+-  // The PS5 offers only the system rate (59.94/60 Hz) and a 120 Hz mode, so
+-  // e.g. 23.976 fps content needs 119.88 Hz: accept integer multiples of the
+-  // frame rate at the desktop resolution, the lowest multiple first (an
+-  // integer multiple gives an even cadence; 2.5x pulldown does not).
+-  CLog::Log(LOGDEBUG,
+-            "[WHITELIST] Searching for a desktop resolution with an integer multiple refresh rate");
+-  for (int multiple = 2; multiple <= 5; ++multiple)
+-  {
+-    for (const auto& mode : indexList)
+-    {
+-      auto i = CDisplaySettings::GetInstance().GetResFromString(mode.asString());
+-      const RESOLUTION_INFO info = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo(i);
+-      if (info.iScreenWidth == desktop_info.iScreenWidth &&
+-          (info.dwFlags & D3DPRESENTFLAG_MODEMASK) ==
+-              (desktop_info.dwFlags & D3DPRESENTFLAG_MODEMASK) &&
+-          // within 0.15%: 24.000 fps also takes 119.88 Hz; "Sync playback to
+-          // display" absorbs the 0.1% difference
+-          MathUtils::FloatEquals(info.fRefreshRate, fps * multiple,
+-                                 0.0015f * info.fRefreshRate))
+-      {
+-        CLog::Log(LOGINFO,
+-                  "[WHITELIST] Matched a desktop resolution with {}x the refresh rate {} ({})",
+-                  multiple, info.strMode, i);
+-        resolution = i;
+-        return;
+-      }
+-    }
+-  }
+-  CLog::Log(LOGDEBUG,
+-            "[WHITELIST] No match for a desktop resolution with an integer multiple refresh rate");
+-#endif
+ 
+   if (noWhiteList || CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+           SETTING_VIDEOSCREEN_WHITELIST_DOUBLEREFRESHRATE))

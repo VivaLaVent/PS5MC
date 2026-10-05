@@ -1,0 +1,106 @@
+From 6eb370749f386d7e7c36cf9d0d843ff2dd4cfc23 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 14:30:57 +0000
+Subject: [PATCH] ps5(omega): 0014-hlg-to-pq-shader-ps5
+
+---
+ system/shaders/GL/1.5/gl_tonemap.glsl         | 21 ++++++++++++++++++-
+ system/shaders/GL/1.5/gl_yuv2rgb_basic.glsl   |  4 ++++
+ system/shaders/GL/4.0/gl_yuv2rgb_filter4.glsl |  4 ++++
+ .../VideoShaders/YUV2RGBShaderGL.cpp          | 10 +++++++++
+ 4 files changed, 38 insertions(+), 1 deletion(-)
+
+diff --git a/system/shaders/GL/1.5/gl_tonemap.glsl b/system/shaders/GL/1.5/gl_tonemap.glsl
+index a70dca2f97..784dbef4f6 100644
+--- a/system/shaders/GL/1.5/gl_tonemap.glsl
++++ b/system/shaders/GL/1.5/gl_tonemap.glsl
+@@ -1,4 +1,4 @@
+-#if (defined(KODI_TONE_MAPPING_REINHARD) || defined(KODI_TONE_MAPPING_ACES) || defined(KODI_TONE_MAPPING_HABLE))
++#if (defined(KODI_TONE_MAPPING_REINHARD) || defined(KODI_TONE_MAPPING_ACES) || defined(KODI_TONE_MAPPING_HABLE) || defined(KODI_HLG_TO_PQ))
+ const float ST2084_m1 = 2610.0 / (4096.0 * 4.0);
+ const float ST2084_m2 = (2523.0 / 4096.0) * 128.0;
+ const float ST2084_c1 = 3424.0 / 4096.0;
+@@ -48,3 +48,22 @@ vec3 inversePQ(vec3 x)
+ }
+ #endif
+ 
++#if defined(KODI_HLG_TO_PQ)
++// HLG video on a PQ-only HDR output (ITU-R BT.2100): HLG signal -> scene light
++// (inverse OETF) -> display light for a 1000 cd/m2 display (OOTF, gamma 1.2)
++// -> PQ signal, normalised to 10000 cd/m2.
++const float HLG_a = 0.17883277;
++const float HLG_b = 0.28466892;
++const float HLG_c = 0.55991073;
++vec3 hlgToPq(vec3 e)
++{
++  e = clamp(e, 0.0, 1.0);
++  vec3 low = e * e / 3.0;
++  vec3 high = (exp((e - HLG_c) / HLG_a) + HLG_b) / 12.0;
++  vec3 scene = mix(low, high, step(0.5, e));
++  float ys = dot(scene, vec3(0.2627, 0.6780, 0.0593));
++  vec3 display = scene * pow(max(ys, 1e-6), 0.2) * (1000.0 / 10000.0);
++  vec3 p = pow(max(display, 0.0), vec3(ST2084_m1));
++  return pow((ST2084_c1 + ST2084_c2 * p) / (1.0 + ST2084_c3 * p), vec3(ST2084_m2));
++}
++#endif
+diff --git a/system/shaders/GL/1.5/gl_yuv2rgb_basic.glsl b/system/shaders/GL/1.5/gl_yuv2rgb_basic.glsl
+index 7d5605c9cd..eca636f05c 100644
+--- a/system/shaders/GL/1.5/gl_yuv2rgb_basic.glsl
++++ b/system/shaders/GL/1.5/gl_yuv2rgb_basic.glsl
+@@ -117,6 +117,10 @@ vec4 process()
+   rgb.rgb = pow(rgb.rgb, vec3(1.0 / 2.2));
+ #endif
+ 
++#endif
++
++#if defined(KODI_HLG_TO_PQ)
++  rgb.rgb = hlgToPq(rgb.rgb);
+ #endif
+ 
+   return rgb;
+diff --git a/system/shaders/GL/4.0/gl_yuv2rgb_filter4.glsl b/system/shaders/GL/4.0/gl_yuv2rgb_filter4.glsl
+index 8a4658cd7b..5575669fff 100644
+--- a/system/shaders/GL/4.0/gl_yuv2rgb_filter4.glsl
++++ b/system/shaders/GL/4.0/gl_yuv2rgb_filter4.glsl
+@@ -135,6 +135,10 @@ vec4 process()
+   rgb.rgb = pow(rgb.rgb, vec3(1.0 / 2.2));
+ #endif
+ 
++#endif
++
++#if defined(KODI_HLG_TO_PQ)
++  rgb.rgb = hlgToPq(rgb.rgb);
+ #endif
+ 
+   return rgb;
+diff --git a/xbmc/cores/VideoPlayer/VideoRenderers/VideoShaders/YUV2RGBShaderGL.cpp b/xbmc/cores/VideoPlayer/VideoRenderers/VideoShaders/YUV2RGBShaderGL.cpp
+index e9ff471f3d..e5238efba2 100644
+--- a/xbmc/cores/VideoPlayer/VideoRenderers/VideoShaders/YUV2RGBShaderGL.cpp
++++ b/xbmc/cores/VideoPlayer/VideoRenderers/VideoShaders/YUV2RGBShaderGL.cpp
+@@ -9,6 +9,10 @@
+ 
+ #include "YUV2RGBShaderGL.h"
+ 
++#if defined(TARGET_PS5)
++#include "windowing/ps5/DefaultFramebufferPS5.h"
++#endif
++
+ #include "../RenderFlags.h"
+ #include "ConvolutionKernels.h"
+ #include "ServiceBroker.h"
+@@ -103,6 +107,12 @@ BaseYUV2RGBGLSLShader::BaseYUV2RGBGLSLShader(bool rect,
+       m_defines += "#define KODI_TONE_MAPPING_HABLE\n";
+   }
+ 
++#if defined(TARGET_PS5)
++  // the PS5's HDR scanout is PQ only: HLG passthrough is converted in the shader
++  if (KODI::PLATFORM::PS5::HdrOutputConvertsHlg())
++    m_defines += "#define KODI_HLG_TO_PQ\n";
++#endif
++
+   VertexShader()->LoadSource("gl_yuv2rgb_vertex.glsl", m_defines);
+ 
+   CLog::Log(LOGDEBUG, "GL: using shader format: {}", m_format);
+-- 
+2.43.0
+

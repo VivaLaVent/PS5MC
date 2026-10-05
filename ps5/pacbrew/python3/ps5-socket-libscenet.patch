@@ -1,0 +1,23 @@
+ps5: route the socket module through libSceNet.
+
+A PS5 title's sandbox denies the raw BSD socket()/connect() syscalls (EACCES),
+which made every outbound connection from Python add-ons fail. Sony's sceNet*
+API is the permitted path (Kodi's curl uses it). Include ps5_pysocket.h in
+socketmodule.c (guarded by -DPS5_PYSOCKET, cross build only), which #defines
+socket/connect/send/recv/... to ps5_* wrappers over sceNet, defined in the
+eboot. Scoped to this one file so Kodi, curl and libc are unaffected - a
+process-wide --wrap of these names broke Kodi's own curl.
+--- a/Modules/socketmodule.c
++++ b/Modules/socketmodule.c
+@@ -262,6 +262,11 @@ shutdown(how) -- shut down traffic in one or both directions\n\
+ /* Generic socket object definitions and includes */
+ #define PySocket_BUILDING_SOCKET
+ #include "socketmodule.h"
++#ifdef PS5_PYSOCKET
++/* Redirect this file's BSD socket calls to libSceNet (see ps5_pysocket.h).
++   Placed after all socket headers so it renames call sites, not declarations. */
++#include "ps5_pysocket.h"
++#endif
+ 
+ /* Addressing includes */
+ 

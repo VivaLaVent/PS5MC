@@ -1,0 +1,46 @@
+# Kodi master needs FFmpeg >= 7.1 (avcodec_get_supported_config); pacbrew-repo
+# ships 7.0.1. Same recipe as pacbrew's ffmpeg package (same configure flags
+# and library dependencies), newer version, no ffplay patch (programs are
+# disabled: Kodi only needs the libraries). Built and installed with makepkg /
+# pacman by scripts/16-build-ffmpeg.sh so it upgrades the pacbrew package.
+pkgname=ps5-payload-ffmpeg
+pkgver=7.1.1
+pkgrel=3
+pkgdesc='Complete solution to record, convert and stream audio and video'
+arch=('any')
+url='https://ffmpeg.org'
+license=('LGPL' 'GPL')
+options=(!strip libtool staticlibs)
+source=("https://ffmpeg.org/releases/ffmpeg-$pkgver.tar.xz")
+sha256sums=('SKIP')
+groups=('ps5-payload-dev')
+depends=('ps5-payload-zlib' 'ps5-payload-openssl' 'ps5-payload-freetype'
+	 'ps5-payload-libfribidi' 'ps5-payload-harfbuzz' 'ps5-payload-libass'
+	 'ps5-payload-libx264' 'ps5-payload-dav1d')
+makedepends=('ps5-payload-sdk')
+
+build() {
+    source "${PS5_PAYLOAD_SDK}/toolchain/prospero.sh"
+    cd ffmpeg-$pkgver
+    ./configure \
+	--prefix="${PREFIX}" --enable-cross-compile \
+	--cross-prefix="${PS5_PAYLOAD_SDK}/bin/prospero-" \
+	--enable-static --disable-shared \
+	--arch=x86_64 --target-os=freebsd \
+	--enable-openssl --enable-version3 \
+	--enable-libfreetype --enable-libfribidi --enable-libharfbuzz \
+	--enable-gpl --enable-libx264 \
+	--disable-debug --disable-doc --disable-programs \
+	--enable-libass --enable-libdav1d \
+	--cc="${CC}" --cxx="${CXX}" --nm="${NM}" --strip="${STRIP}" \
+	--ar="${AR}" --ranlib="${RANLIB}" --pkg-config="${PKG_CONFIG}"
+    ${MAKE}
+}
+
+package() {
+    source "${PS5_PAYLOAD_SDK}/toolchain/prospero.sh"
+    cd ffmpeg-$pkgver
+    export DESTDIR="${pkgdir}/${DESTDIR}"
+    ${MAKE} install
+    ${PS5_CROSS_FIX_ROOT} "${DESTDIR}/${PREFIX}"
+}

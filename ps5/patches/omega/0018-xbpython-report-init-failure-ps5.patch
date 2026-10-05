@@ -1,0 +1,43 @@
+From 2e528e5930669a5dceb69b790911abef40338b63 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 14:32:09 +0000
+Subject: [PATCH] ps5(omega): 0018 xbpython-report-init-failure (ported: Omega
+ initializes in OnScriptInitialized, not the ctor)
+
+---
+ xbmc/interfaces/python/XBPython.cpp | 19 ++++++++++++++++++-
+ 1 file changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/xbmc/interfaces/python/XBPython.cpp b/xbmc/interfaces/python/XBPython.cpp
+index 5fdd17610f..9bb7b245b7 100644
+--- a/xbmc/interfaces/python/XBPython.cpp
++++ b/xbmc/interfaces/python/XBPython.cpp
+@@ -543,7 +543,24 @@ bool XBPython::OnScriptInitialized(ILanguageInvoker* invoker)
+     CHTTPPythonWsgiInvoker::GlobalInitializeModules();
+ #endif
+ 
+-    Py_Initialize();
++    // Initialize through the PyConfig API so a failed initialization is reported
++    // as a PyStatus we can log, instead of Py_Initialize()'s Py_ExitStatusException()
++    // which prints to stderr (invisible on some platforms) and exit()s mid-startup.
++    {
++      PyConfig config;
++      PyConfig_InitPythonConfig(&config);
++      PyStatus status = Py_InitializeFromConfig(&config);
++      PyConfig_Clear(&config);
++      if (PyStatus_Exception(status))
++      {
++        CLog::Log(LOGFATAL,
++                  "XBPython: Python initialization failed in {}: {} (exit code {}); Python "
++                  "add-ons are unavailable",
++                  status.func ? status.func : "?",
++                  status.err_msg ? status.err_msg : "<no message>", status.exitcode);
++        return false;
++      }
++    }
+ 
+ #if PY_VERSION_HEX < 0x03070000
+     // Python >= 3.7 Py_Initialize implicitly calls PyEval_InitThreads
+-- 
+2.43.0
+

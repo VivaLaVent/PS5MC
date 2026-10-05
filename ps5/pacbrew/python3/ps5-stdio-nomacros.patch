@@ -1,0 +1,35 @@
+--- a/Include/Python.h
++++ b/Include/Python.h
+@@ -39,6 +39,32 @@
+ #  include <stdlib.h>             // getenv()
+ #  include <string.h>             // memcpy()
+ #endif
++#ifdef PS5_CLEANROOM_STDIO
++/* The SDK's FreeBSD <stdio.h> turns these into inline macros that read FILE
++   struct fields (_r, _p, _flags, _file) directly - for C only; C++ gets the
++   real functions. In a PS5 title libc is the clean-room libc.prx, whose FILE
++   layout is not FreeBSD's, so the inlined field reads return garbage: the
++   tokenizer faulted in getc_unlocked() reading the first add-on script, and
++   fileno(stderr) returned a wrong fd. Undefine them so every use calls the
++   library function, which knows its own FILE. */
++#  undef getc
++#  undef putc
++#  undef getchar
++#  undef putchar
++#  undef feof
++#  undef ferror
++#  undef fileno
++#  undef clearerr
++#  undef getc_unlocked
++#  undef putc_unlocked
++#  undef getchar_unlocked
++#  undef putchar_unlocked
++#  undef feof_unlocked
++#  undef ferror_unlocked
++#  undef fileno_unlocked
++#  undef clearerr_unlocked
++#  undef fputc_unlocked
++#endif
+ #if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 < 0x030d0000
+ #  include <ctype.h>              // tolower()
+ #  ifndef MS_WINDOWS

@@ -1,0 +1,13 @@
+The PS5 libc has no CLOCK_MONOTONIC_RAW (Linux-only); use CLOCK_MONOTONIC like Android/WASM.
+
+--- a/xbmc/utils/TimeUtils.cpp	2026-09-25 15:06:10.593027999 +0000
++++ b/xbmc/utils/TimeUtils.cpp	2026-09-25 15:06:24.384300912 +0000
+@@ -37,7 +37,7 @@
+   return( (int64_t)PerformanceCount.QuadPart );
+ #else
+   struct timespec now = {};
+-#if defined(TARGET_ANDROID) || defined(TARGET_WASM)
++#if defined(TARGET_ANDROID) || defined(TARGET_WASM) || defined(TARGET_PS5)
+   clock_gettime(CLOCK_MONOTONIC, &now);
+ #else
+   clock_gettime(CLOCK_MONOTONIC_RAW, &now);

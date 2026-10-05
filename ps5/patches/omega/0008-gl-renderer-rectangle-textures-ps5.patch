@@ -1,0 +1,29 @@
+From fcccfec0d2997db1d560470bfd786620dea5252e Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 14:30:56 +0000
+Subject: [PATCH] ps5(omega): 0008-gl-renderer-rectangle-textures-ps5
+
+---
+ xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp b/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp
+index d580b9aab4..f7a1efc9f0 100644
+--- a/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp
++++ b/xbmc/cores/VideoPlayer/VideoRenderers/LinuxRendererGL.cpp
+@@ -265,6 +265,12 @@ bool CLinuxRendererGL::Configure(const VideoPicture &picture, float fps, unsigne
+   // folder restores the PBO path for comparison).
+   if (access("/app0/kodi-pbo", F_OK) != 0)
+     m_pboSupported = false;
++  // The driver keeps 2D R8/RG8 textures that can also be render targets in
++  // its tiled layout and converts every upload pixel by pixel (~23 ms per
++  // 1080p plane). Rectangle textures are always linear: uploads are row
++  // copies. "kodi-tex2d" in the title folder restores 2D textures.
++  if (access("/app0/kodi-tex2d", F_OK) != 0)
++    m_textureTarget = GL_TEXTURE_RECTANGLE;
+ #endif
+ }
+ 
+-- 
+2.43.0
+

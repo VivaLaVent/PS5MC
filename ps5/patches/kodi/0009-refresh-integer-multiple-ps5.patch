@@ -1,0 +1,45 @@
+ps5: refresh-rate selection accepts integer multiples of the frame rate at the
+desktop resolution (23.976/24 fps -> 119.88 Hz), before 2x/2.5x.
+
+--- a/xbmc/windowing/Resolution.cpp	2026-09-26 00:15:57.832306875 +0000
++++ b/xbmc/windowing/Resolution.cpp	2026-09-26 00:16:45.761311029 +0000
+@@ -243,6 +243,39 @@
+ 
+   CLog::Log(LOGDEBUG, "[WHITELIST] No match for a desktop resolution with an exact refresh rate");
+ 
++#if defined(TARGET_PS5)
++  // The PS5 offers only the system rate (59.94/60 Hz) and a 120 Hz mode, so
++  // e.g. 23.976 fps content needs 119.88 Hz: accept integer multiples of the
++  // frame rate at the desktop resolution, the lowest multiple first (an
++  // integer multiple gives an even cadence; 2.5x pulldown does not).
++  CLog::Log(LOGDEBUG,
++            "[WHITELIST] Searching for a desktop resolution with an integer multiple refresh rate");
++  for (int multiple = 2; multiple <= 5; ++multiple)
++  {
++    for (const auto& mode : indexList)
++    {
++      auto i = CDisplaySettings::GetInstance().GetResFromString(mode.asString());
++      const RESOLUTION_INFO info = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo(i);
++      if (info.iScreenWidth == desktop_info.iScreenWidth &&
++          (info.dwFlags & D3DPRESENTFLAG_MODEMASK) ==
++              (desktop_info.dwFlags & D3DPRESENTFLAG_MODEMASK) &&
++          // within 0.15%: 24.000 fps also takes 119.88 Hz; "Sync playback to
++          // display" absorbs the 0.1% difference
++          MathUtils::FloatEquals(info.fRefreshRate, fps * multiple,
++                                 0.0015f * info.fRefreshRate))
++      {
++        CLog::Log(LOGINFO,
++                  "[WHITELIST] Matched a desktop resolution with {}x the refresh rate {} ({})",
++                  multiple, info.strMode, i);
++        resolution = i;
++        return;
++      }
++    }
++  }
++  CLog::Log(LOGDEBUG,
++            "[WHITELIST] No match for a desktop resolution with an integer multiple refresh rate");
++#endif
++
+   if (noWhiteList || CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+           SETTING_VIDEOSCREEN_WHITELIST_DOUBLEREFRESHRATE))
+   {
