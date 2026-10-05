@@ -32,6 +32,13 @@ macro(buildSpdlog)
                  -DSPDLOG_BUILD_TESTS=OFF
                  -DSPDLOG_BUILD_BENCH=OFF
                  -DSPDLOG_FMT_EXTERNAL=ON
+                 # ps5: the sub-build's find_package(fmt) must use the internal
+                 # (version-matched) fmt. CMAKE_PREFIX_PATH is re-rooted under
+                 # the sysroot when cross-compiling, so the depends dir does not
+                 # resolve and the sysroot's fmt 12 wins (spdlog 1.10 needs 9).
+                 # fmt_DIR names the config dir directly and is not re-rooted;
+                 # the internal fmt is a declared dependency, so it exists by then.
+                 -Dfmt_DIR=${DEPENDS_PATH}/lib/cmake/fmt
                  ${EXTRA_ARGS})
 
   # Set definitions that will be set in the built cmake config file
