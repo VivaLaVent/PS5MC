@@ -9,6 +9,10 @@
 
 #include "YUV2RGBShaderGL.h"
 
+#if defined(TARGET_PS5)
+#include "windowing/ps5/DefaultFramebufferPS5.h"
+#endif
+
 #include "../RenderFlags.h"
 #include "ConvolutionKernels.h"
 #include "ServiceBroker.h"
@@ -102,6 +106,12 @@ BaseYUV2RGBGLSLShader::BaseYUV2RGBGLSLShader(bool rect,
     else if (toneMapMethod == VS_TONEMAPMETHOD_HABLE)
       m_defines += "#define KODI_TONE_MAPPING_HABLE\n";
   }
+
+#if defined(TARGET_PS5)
+  // the PS5's HDR scanout is PQ only: HLG passthrough is converted in the shader
+  if (KODI::PLATFORM::PS5::HdrOutputConvertsHlg())
+    m_defines += "#define KODI_HLG_TO_PQ\n";
+#endif
 
   VertexShader()->LoadSource("gl_yuv2rgb_vertex.glsl", m_defines);
 
