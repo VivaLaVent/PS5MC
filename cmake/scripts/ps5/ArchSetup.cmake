@@ -53,10 +53,17 @@ set(ENABLE_UPNP        ON  CACHE BOOL "Platinum builds fine on POSIX")
 # FMT is in pacbrew, but its CMake package config does not resolve from the
 # host and Kodi then silently ends up without a kodi::Fmt target; spdlog is
 # built internally anyway and must match, so build both.
-foreach(_dep CROSSGUID EXIV2 FLATBUFFERS FMT FSTRCMP LZO2 NLOHMANNJSON PCRE2 SPDLOG TAGLIB)
+# KISSFFT and PCRE (v1) are Kodi 21-only requirements that 21 can build
+# internally; on 22 the options are simply unused. LZO2 and RAPIDJSON are also
+# 21-only but 21 cannot build them internally: scripts/22-build-kodi21-deps.sh
+# puts them in the sysroot.
+foreach(_dep CROSSGUID EXIV2 FLATBUFFERS FMT FSTRCMP KISSFFT LZO2 NLOHMANNJSON PCRE PCRE2 SPDLOG TAGLIB)
   set(ENABLE_INTERNAL_${_dep} ON CACHE BOOL "PS5: not in pacbrew-repo, build internally" FORCE)
 endforeach()
 unset(_dep)
+# Kodi 21's FindRapidJSON spells its switch in mixed case (and wants a CMake
+# config package, not pkg-config); internal build is the clean way on ps5.
+set(ENABLE_INTERNAL_RapidJSON ON CACHE BOOL "PS5: Kodi 21 only; build internally" FORCE)
 
 # Optional: the ps5-opengl native-app template routes malloc through an
 # app-owned heap (native-app/app_heap.c + linker wraps). Its default budget
