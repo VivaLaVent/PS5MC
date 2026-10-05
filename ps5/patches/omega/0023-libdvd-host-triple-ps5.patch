@@ -1,0 +1,61 @@
+From 31206d40b64859ba3c358667ceda31d61a186fdb Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Mon, 5 Oct 2026 19:34:16 +0000
+Subject: [PATCH] ps5(omega): libdvd autotools builds - config.sub rejects
+ x86_64-ps5; use x86_64-unknown-freebsd as --host
+
+---
+ cmake/modules/FindLibDvdCSS.cmake  | 3 +++
+ cmake/modules/FindLibDvdNav.cmake  | 5 +++++
+ cmake/modules/FindLibDvdRead.cmake | 5 +++++
+ 3 files changed, 13 insertions(+)
+
+diff --git a/cmake/modules/FindLibDvdCSS.cmake b/cmake/modules/FindLibDvdCSS.cmake
+index 742efd5583..fe1ae61f0b 100644
+--- a/cmake/modules/FindLibDvdCSS.cmake
++++ b/cmake/modules/FindLibDvdCSS.cmake
+@@ -41,6 +41,9 @@ if(ENABLE_DVDCSS)
+     elseif(ARCH STREQUAL x86_64)
+       set(HOST_ARCH x86_64-linux-android)
+     endif()
++  elseif(CORE_SYSTEM_NAME STREQUAL ps5)
++    # ps5: config.sub rejects x86_64-ps5; see FindLibDvdRead.cmake
++    set(HOST_ARCH x86_64-unknown-freebsd)
+   elseif(CORE_SYSTEM_NAME STREQUAL windowsstore)
+     set(LIBDVD_ADDITIONAL_ARGS "-DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}" "-DCMAKE_SYSTEM_VERSION=${CMAKE_SYSTEM_VERSION}")
+     set(${MODULE}_CXX_FLAGS "/Zc:twoPhase-")
+diff --git a/cmake/modules/FindLibDvdNav.cmake b/cmake/modules/FindLibDvdNav.cmake
+index ffd8d9d4d3..78bf3837d7 100644
+--- a/cmake/modules/FindLibDvdNav.cmake
++++ b/cmake/modules/FindLibDvdNav.cmake
+@@ -48,6 +48,11 @@ if(NOT TARGET LibDvdNav::LibDvdNav)
+     elseif(ARCH STREQUAL x86_64)
+       set(HOST_ARCH x86_64-linux-android)
+     endif()
++  elseif(CORE_SYSTEM_NAME STREQUAL ps5)
++    # ps5: ARCH is x86_64-ps5, which autoconf's config.sub rejects. The console
++    # is FreeBSD-derived and CC is already the cross clang, so give configure
++    # a triple it knows; --host only sets its assumptions, not the compiler.
++    set(HOST_ARCH x86_64-unknown-freebsd)
+   elseif(CORE_SYSTEM_NAME STREQUAL windowsstore)
+     set(LIBDVD_ADDITIONAL_ARGS "-DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}" "-DCMAKE_SYSTEM_VERSION=${CMAKE_SYSTEM_VERSION}")
+   endif()
+diff --git a/cmake/modules/FindLibDvdRead.cmake b/cmake/modules/FindLibDvdRead.cmake
+index b67ff904ed..9e1be2d425 100644
+--- a/cmake/modules/FindLibDvdRead.cmake
++++ b/cmake/modules/FindLibDvdRead.cmake
+@@ -50,6 +50,11 @@ if(NOT TARGET LibDvdRead::LibDvdRead)
+     elseif(ARCH STREQUAL x86_64)
+       set(HOST_ARCH x86_64-linux-android)
+     endif()
++  elseif(CORE_SYSTEM_NAME STREQUAL ps5)
++    # ps5: ARCH is x86_64-ps5, which autoconf's config.sub rejects. The console
++    # is FreeBSD-derived and CC is already the cross clang, so give configure
++    # a triple it knows; --host only sets its assumptions, not the compiler.
++    set(HOST_ARCH x86_64-unknown-freebsd)
+   elseif(CORE_SYSTEM_NAME STREQUAL windowsstore)
+     set(LIBDVD_ADDITIONAL_ARGS "-DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}" "-DCMAKE_SYSTEM_VERSION=${CMAKE_SYSTEM_VERSION}")
+   endif()
+-- 
+2.43.0
+
