@@ -170,8 +170,17 @@ if [ -f "$PY_ROOT/lib/libpython3.14.a" ]; then
     echo "!! Python is installed, but Kodi's bindings need swig and java: sudo apt-get install -y swig default-jre-headless"
     exit 1; }
   # Kodi 22 needs SWIG >= 4.5 for the bindings; distro SWIG is older, so build it in-tree.
+  # Hand FindPython3 the two files as ABSOLUTE artifact paths, not a root to
+  # search. Kodi's FindPython turns PYTHON_PATH=/user/homebrew into
+  # Python3_ROOT_DIR, which CMake then re-roots under the find root that is
+  # already .../target/user/homebrew -> a doubled, nonexistent
+  # .../homebrew/user/homebrew/... (seen in --debug-find-pkg on the Kodi 21
+  # branch). Kodi 22 only found the files by luck of search order. Artifact
+  # paths are honoured over any search and cannot be re-rooted.
   PYTHON_ARGS=(-DENABLE_PYTHON=ON -DENABLE_INTERNAL_SWIG=ON -DPYTHON_PATH=/user/homebrew -DPYTHON_VER=3.14
-               -DPython3_USE_STATIC_LIBS=ON)
+               -DPython3_USE_STATIC_LIBS=ON
+               -DPython3_INCLUDE_DIR="$PY_ROOT/include/python3.14"
+               -DPython3_LIBRARY="$PY_ROOT/lib/libpython3.14.a")
   echo "==> Python 3.14 found in the sysroot: Python add-ons enabled"
 else
   PYTHON_ARGS=(-DENABLE_PYTHON=OFF)
@@ -197,8 +206,8 @@ cmake -S "$KODI_SRC" -B "$BUILD" -G Ninja \
   -DCMAKE_C_FLAGS_RELEASE="-O2 -g -DNDEBUG" \
   -DCMAKE_CXX_FLAGS_RELEASE="-O2 -g -DNDEBUG" \
   -DCMAKE_INSTALL_PREFIX=/app0 \
-  -DWITH_TEXTUREPACKER="$NATIVE/bin/kodi-TexturePacker" \
-  -DWITH_JSONSCHEMABUILDER="$NATIVE/bin/kodi-JsonSchemaBuilder" \
+  -DWITH_TEXTUREPACKER="$NATIVE/bin/TexturePacker" \
+  -DWITH_JSONSCHEMABUILDER="$NATIVE/bin/JsonSchemaBuilder" \
   # ^ both host tools as BINARY paths, not their dir: Kodi 21's find-modules
   #   strip one path component unconditionally (a dir became its parent ->
   #   "not found"); 22's check IS_DIRECTORY first. The binary path satisfies both.
