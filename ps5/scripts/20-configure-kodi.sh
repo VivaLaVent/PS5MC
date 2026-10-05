@@ -179,8 +179,10 @@ if [ -f "$PY_ROOT/lib/libpython3.14.a" ]; then
   # paths are honoured over any search and cannot be re-rooted.
   PYTHON_ARGS=(-DENABLE_PYTHON=ON -DENABLE_INTERNAL_SWIG=ON -DPYTHON_PATH=/user/homebrew -DPYTHON_VER=3.14
                -DPython3_USE_STATIC_LIBS=ON
-               -DPython3_INCLUDE_DIR="$PY_ROOT/include/python3.14"
-               -DPython3_LIBRARY="$PY_ROOT/lib/libpython3.14.a")
+               -DPython3_INCLUDE_DIR:PATH="$PY_ROOT/include/python3.14"
+               -DPython3_LIBRARY:FILEPATH="$PY_ROOT/lib/libpython3.14.a")
+  # typed (:PATH/:FILEPATH) so they are real cache entries, not UNINITIALIZED
+  # command-line values that a later -U glob or module unset() can drop.
   echo "==> Python 3.14 found in the sysroot: Python add-ons enabled"
 else
   PYTHON_ARGS=(-DENABLE_PYTHON=OFF)
