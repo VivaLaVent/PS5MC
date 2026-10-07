@@ -23,25 +23,24 @@ namespace { void Klogf(const char* fmt, ...) { char b[256]; va_list ap; va_start
 
 #include <sys/sysctl.h>
 
+
 // Kodi's allocations live in one direct-memory heap managed by the ps5-opengl
 // template's app_heap.c, which counts its live bytes. The deploy appends these
 // two accessors to it; the weak versions here keep the plain CMake link of
 // kodi.bin (which does not include the template) working, and lose to the
 // template's strong ones in the eboot.
-extern "C"
+// The direct-memory heap (ps5-opengl's app_heap.c) is linked into the eboot by
+// the native-app template and defines these as STRONG symbols; the weak
+// fallbacks here keep a plain kodi.bin link (and tests) working and lose to the
+// strong ones in the eboot. Resolved at LINK time - no constructor (one ran
+// during C++ static init and crashed in ios_base::Init) and no runtime lookup.
+extern "C" __attribute__((weak)) size_t ps5_heap_capacity_value()
 {
-// The direct-memory heap (ps5-opengl's app_heap.c, linked into the eboot by the
-// native-app template, NOT into kodi.bin) publishes its counters here through a
-// constructor. A weak function would not do: kodi.bin is linked whole-archive
-// and its weak 0 can win over the template's strong symbol. A plain pointer is
-// unambiguous - set by the eboot, null everywhere else (plain kodi.bin, tests).
-size_t (*g_ps5_heap_live)(void) = nullptr;
-size_t (*g_ps5_heap_capacity)(void) = nullptr;
-void ps5_register_heap_stats(size_t (*live)(void), size_t (*capacity)(void))
-{
-  g_ps5_heap_live = live;
-  g_ps5_heap_capacity = capacity;
+  return 0;
 }
+extern "C" __attribute__((weak)) size_t ps5_heap_live_bytes_value()
+{
+  return 0;
 }
 
 namespace KODI
@@ -88,10 +87,10 @@ void GetMemoryStatus(MemoryStatus* buffer)
 
   // Report Kodi's heap: its size and how much of it is in use. (The fixed
   // "half of 5 GiB" this replaced always showed 2560/5120 MB.)
-  const size_t capacity = g_ps5_heap_capacity ? g_ps5_heap_capacity() : 0;
+  const size_t capacity = ps5_heap_capacity_value();
   if (capacity != 0)
   {
-    const size_t live = g_ps5_heap_live ? g_ps5_heap_live() : 0;
+    const size_t live = ps5_heap_live_bytes_value();
     buffer->totalPhys = capacity;
     buffer->availPhys = live < capacity ? capacity - live : 0;
     static bool logged = false;
