@@ -60,8 +60,10 @@ public:
   // The PS5 GL driver reports buffer ages that do not match its swap chain
   // (stale GUI content showed through). Age 0 makes Kodi redraw the whole
   // screen every frame, which is cheap on this GPU.
+#if PS5_KODI_MAJOR >= 22 // dirty-region hooks are Kodi 22 only
   void SetDirtyRegions(const CDirtyRegionList& dirtyRegions) override {}
   int GetBufferAge() override { return 0; }
+#endif
 
   // CRenderSystemGL
   void PresentRender(bool rendered, bool videoLayer) override;
@@ -76,15 +78,21 @@ public:
 
   // HDR output for PQ video (HdrOutputPS5): Kodi's HDR and GUI-compositing hooks
   // no plane-role model here (GBM's flip-flop): the surface is always right
+#if PS5_KODI_MAJOR >= 22 // Kodi 22 only
   bool SetVideoOutput(const VideoPicture* videoPicture) override { return true; }
+#endif
   bool SetHDR(const VideoPicture* videoPicture) override;
   bool IsHDRDisplay() override;
+#if PS5_KODI_MAJOR >= 22 // HDR GUI compositing is Kodi 22 only
   bool SetGuiCompositing(int colorTransfer) override;
   bool IsHdrComposite() const override { return m_hdr.IsGuiCompositing(); }
+#endif
   CHDRCapabilities GetDisplayHDRCapabilities() const override;
+#if PS5_KODI_MAJOR >= 22 // HDR GUI compositing is Kodi 22 only
   bool BeginGuiComposite(bool guiWillRender) override;
   void EndGuiComposite() override;
   void CompositeGui() override;
+#endif
 
 protected:
   void SetVSyncImpl(bool enable) override;
