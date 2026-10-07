@@ -49,10 +49,17 @@ public:
   bool Delete(const CURL& url) override;
   bool Rename(const CURL& url, const CURL& urlnew) override;
 
+#if PS5_KODI_MAJOR >= 22
   int IoControl(IOControl request, void* param) override
   {
     return request == IOControl::SEEK_POSSIBLE ? 1 : -1;
   }
+#else // Kodi 21: EIoControl / IOCTRL_*, renamed to enum class IOControl in 22
+  int IoControl(EIoControl request, void* param) override
+  {
+    return request == IOCTRL_SEEK_POSSIBLE ? 1 : -1;
+  }
+#endif
 
 private:
   bool OpenInternal(const CURL& url, bool forWrite, bool overwrite);

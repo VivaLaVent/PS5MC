@@ -1,0 +1,275 @@
+From ae5b29e1d13438b42722a52f103f3d94a7cd2204 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Wed, 7 Oct 2026 12:50:08 +0000
+Subject: [PATCH] ps5(omega): Kodi 22 compatibility - jobs/ and FileItemList.h
+ headers at their 22 paths; backport CGuiCompositeShaderGL + gl_gui_composite
+ shaders (HDR GUI compositing)
+
+---
+ system/shaders/GL/1.5/gl_gui_composite.frag | 68 +++++++++++++++++++++
+ system/shaders/GL/1.5/gl_gui_composite.vert | 20 ++++++
+ xbmc/FileItemList.h                         |  7 +++
+ xbmc/jobs/Job.h                             |  6 ++
+ xbmc/jobs/JobManager.h                      |  6 ++
+ xbmc/rendering/gl/CMakeLists.txt            |  6 +-
+ xbmc/rendering/gl/GuiCompositeShaderGL.cpp  | 39 ++++++++++++
+ xbmc/rendering/gl/GuiCompositeShaderGL.h    | 39 ++++++++++++
+ 8 files changed, 189 insertions(+), 2 deletions(-)
+ create mode 100644 system/shaders/GL/1.5/gl_gui_composite.frag
+ create mode 100644 system/shaders/GL/1.5/gl_gui_composite.vert
+ create mode 100644 xbmc/FileItemList.h
+ create mode 100644 xbmc/jobs/Job.h
+ create mode 100644 xbmc/jobs/JobManager.h
+ create mode 100644 xbmc/rendering/gl/GuiCompositeShaderGL.cpp
+ create mode 100644 xbmc/rendering/gl/GuiCompositeShaderGL.h
+
+diff --git a/system/shaders/GL/1.5/gl_gui_composite.frag b/system/shaders/GL/1.5/gl_gui_composite.frag
+new file mode 100644
+index 0000000000..9367d46223
+--- /dev/null
++++ b/system/shaders/GL/1.5/gl_gui_composite.frag
+@@ -0,0 +1,68 @@
++/*
++ *  Copyright (C) 2026 Team Kodi
++ *  This file is part of Kodi - https://kodi.tv
++ *
++ *  SPDX-License-Identifier: GPL-2.0-or-later
++ *  See LICENSES/README.md for more information.
++ */
++
++#version 150
++
++in vec2 v_tex;
++out vec4 fragColor;
++uniform sampler2D u_samp;
++uniform float u_sdrPeak; // SDR peak in normalized PQ (e.g. 100/10000 = 0.01)
++
++// ST2084 (PQ) constants
++const float ST2084_m1 = 0.1593017578125;   // 2610/16384
++const float ST2084_m2 = 78.84375;           // 2523/4096 * 128
++const float ST2084_c1 = 0.8359375;          // 3424/4096
++const float ST2084_c2 = 18.8515625;         // 2413/4096 * 32
++const float ST2084_c3 = 18.6875;            // 2392/4096 * 32
++
++// BT.709 -> BT.2020 color space conversion matrix (applied in linear light)
++const mat3 bt709_to_bt2020 = mat3(
++  0.6274,  0.0691,  0.0164,
++  0.3293,  0.9195,  0.0880,
++  0.0433,  0.0114,  0.8956
++);
++
++vec3 forwardPQ(vec3 L)
++{
++  vec3 Lm1 = pow(L, vec3(ST2084_m1));
++  return pow((ST2084_c1 + ST2084_c2 * Lm1) / (1.0 + ST2084_c3 * Lm1), vec3(ST2084_m2));
++}
++
++void main()
++{
++  vec4 gui = texture(u_samp, v_tex);
++
++  // Skip pixels the GUI never wrote to. Blend unit would still preserve video
++  // bit-exactly via DST*(1-0)+garbage*0=DST, but discard makes it structural
++  // and avoids the tone-map math, BO read and BO write for those pixels.
++  if (gui.a == 0.0)
++    discard;
++
++  // sRGB -> linear (IEC 61966-2-1 piecewise EOTF)
++  vec3 linear = mix(gui.rgb / 12.92,
++                    pow((gui.rgb + 0.055) / 1.055, vec3(2.4)),
++                    step(0.04045, gui.rgb));
++
++  // BT.709 -> BT.2020 gamut mapping
++  linear = bt709_to_bt2020 * linear;
++
++  // scale to PQ luminance range: SDR content at u_sdrPeak of 10000 nits
++  linear *= u_sdrPeak;
++
++  // linear -> PQ
++  vec3 pq = forwardPQ(linear);
++
++  // Limited-range encoding at the BO write boundary. Canonical normalized
++  // ratios (bit-depth-agnostic in float space; BO write quantizes to the
++  // active surface bit depth).
++#ifdef KODI_LIMITED_RANGE
++  pq = pq * ((235.0 - 16.0) / 255.0) + (16.0 / 255.0);
++#endif
++
++  fragColor = vec4(pq, gui.a);
++}
+diff --git a/system/shaders/GL/1.5/gl_gui_composite.vert b/system/shaders/GL/1.5/gl_gui_composite.vert
+new file mode 100644
+index 0000000000..dc8607c9b7
+--- /dev/null
++++ b/system/shaders/GL/1.5/gl_gui_composite.vert
+@@ -0,0 +1,20 @@
++/*
++ *  Copyright (C) 2026 Team Kodi
++ *  This file is part of Kodi - https://kodi.tv
++ *
++ *  SPDX-License-Identifier: GPL-2.0-or-later
++ *  See LICENSES/README.md for more information.
++ */
++
++#version 150
++
++in vec2 a_pos;
++in vec2 a_tex;
++out vec2 v_tex;
++uniform mat4 u_proj;
++
++void main()
++{
++  gl_Position = u_proj * vec4(a_pos, 0.0, 1.0);
++  v_tex = a_tex;
++}
+diff --git a/xbmc/FileItemList.h b/xbmc/FileItemList.h
+new file mode 100644
+index 0000000000..882af870d4
+--- /dev/null
++++ b/xbmc/FileItemList.h
+@@ -0,0 +1,7 @@
++/*
++ *  ps5(omega) compatibility: Kodi 22 split CFileItemList into its own header;
++ *  on Kodi 21 it is declared in FileItem.h. The ps5 platform code includes the
++ *  Kodi 22 path.
++ */
++#pragma once
++#include "FileItem.h"
+diff --git a/xbmc/jobs/Job.h b/xbmc/jobs/Job.h
+new file mode 100644
+index 0000000000..9e1f3a2fa0
+--- /dev/null
++++ b/xbmc/jobs/Job.h
+@@ -0,0 +1,6 @@
++/*
++ *  ps5(omega) compatibility: Kodi 22 moved this header to jobs/; on Kodi 21 it
++ *  lives in utils/. The ps5 platform code includes the Kodi 22 path.
++ */
++#pragma once
++#include "utils/Job.h"
+diff --git a/xbmc/jobs/JobManager.h b/xbmc/jobs/JobManager.h
+new file mode 100644
+index 0000000000..df9f4b399c
+--- /dev/null
++++ b/xbmc/jobs/JobManager.h
+@@ -0,0 +1,6 @@
++/*
++ *  ps5(omega) compatibility: Kodi 22 moved this header to jobs/; on Kodi 21 it
++ *  lives in utils/. The ps5 platform code includes the Kodi 22 path.
++ */
++#pragma once
++#include "utils/JobManager.h"
+diff --git a/xbmc/rendering/gl/CMakeLists.txt b/xbmc/rendering/gl/CMakeLists.txt
+index 71c1ee8d32..56cf4ecfec 100644
+--- a/xbmc/rendering/gl/CMakeLists.txt
++++ b/xbmc/rendering/gl/CMakeLists.txt
+@@ -1,11 +1,13 @@
+ if(TARGET OpenGL::GL)
+   set(SOURCES RenderSystemGL.cpp
+               ScreenshotSurfaceGL.cpp
+-              GLShader.cpp)
++              GLShader.cpp
++              GuiCompositeShaderGL.cpp)
+ 
+   set(HEADERS RenderSystemGL.h
+               ScreenshotSurfaceGL.h
+-              GLShader.h)
++              GLShader.h
++              GuiCompositeShaderGL.h)
+ 
+   core_add_library(rendering_gl)
+ endif()
+diff --git a/xbmc/rendering/gl/GuiCompositeShaderGL.cpp b/xbmc/rendering/gl/GuiCompositeShaderGL.cpp
+new file mode 100644
+index 0000000000..0efa6df3df
+--- /dev/null
++++ b/xbmc/rendering/gl/GuiCompositeShaderGL.cpp
+@@ -0,0 +1,39 @@
++/*
++ *  Copyright (C) 2026 Team Kodi
++ *  This file is part of Kodi - https://kodi.tv
++ *
++ *  SPDX-License-Identifier: GPL-2.0-or-later
++ *  See LICENSES/README.md for more information.
++ */
++
++#include "GuiCompositeShaderGL.h"
++
++#include "utils/log.h"
++
++CGuiCompositeShaderGL::CGuiCompositeShaderGL(const std::string& prefix)
++{
++  VertexShader()->LoadSource("gl_gui_composite.vert", prefix);
++  PixelShader()->LoadSource("gl_gui_composite.frag", prefix);
++}
++
++void CGuiCompositeShaderGL::OnCompiledAndLinked()
++{
++  m_hPos = glGetAttribLocation(ProgramHandle(), "a_pos");
++  m_hTex = glGetAttribLocation(ProgramHandle(), "a_tex");
++  m_hSamp = glGetUniformLocation(ProgramHandle(), "u_samp");
++  m_hProj = glGetUniformLocation(ProgramHandle(), "u_proj");
++  m_hSdrPeak = glGetUniformLocation(ProgramHandle(), "u_sdrPeak");
++
++  glUseProgram(ProgramHandle());
++  glUniform1i(m_hSamp, 0);
++  glUseProgram(0);
++}
++
++bool CGuiCompositeShaderGL::OnEnabled()
++{
++  if (m_proj)
++    glUniformMatrix4fv(m_hProj, 1, GL_FALSE, m_proj);
++
++  glUniform1f(m_hSdrPeak, m_sdrPeak);
++  return true;
++}
+diff --git a/xbmc/rendering/gl/GuiCompositeShaderGL.h b/xbmc/rendering/gl/GuiCompositeShaderGL.h
+new file mode 100644
+index 0000000000..0f707ce566
+--- /dev/null
++++ b/xbmc/rendering/gl/GuiCompositeShaderGL.h
+@@ -0,0 +1,39 @@
++/*
++ *  Copyright (C) 2026 Team Kodi
++ *  This file is part of Kodi - https://kodi.tv
++ *
++ *  SPDX-License-Identifier: GPL-2.0-or-later
++ *  See LICENSES/README.md for more information.
++ */
++
++#pragma once
++
++#include "guilib/Shader.h"
++
++#include <string>
++
++class CGuiCompositeShaderGL : public Shaders::CGLSLShaderProgram
++{
++public:
++  explicit CGuiCompositeShaderGL(const std::string& prefix);
++
++  void SetProjection(const GLfloat* proj) { m_proj = proj; }
++  void SetSdrPeak(float peak) { m_sdrPeak = peak; }
++
++  GLint GetPosLoc() { return m_hPos; }
++  GLint GetTexLoc() { return m_hTex; }
++
++protected:
++  void OnCompiledAndLinked() override;
++  bool OnEnabled() override;
++
++private:
++  const GLfloat* m_proj{nullptr};
++  float m_sdrPeak{203.0f / 10000.0f};
++
++  GLint m_hPos{-1};
++  GLint m_hTex{-1};
++  GLint m_hSamp{-1};
++  GLint m_hProj{-1};
++  GLint m_hSdrPeak{-1};
++};
+-- 
+2.43.0
+

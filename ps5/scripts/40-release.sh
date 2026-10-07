@@ -47,7 +47,9 @@ for v in "${VARIANTS[@]}"; do
   KODI_SRC="$FORK" BUILD="$bdir" bash "$SCRIPTS/20-configure-kodi.sh" > "$OUT/$name-configure.log" 2>&1 \
     || { echo "!! $name: configure failed - see $OUT/$name-configure.log"; grep -E '!!' "$OUT/$name-configure.log"; exit 1; }
   grep -E '==> (source mode|build stamp)' "$OUT/$name-configure.log"
-  cmake --build "$bdir" -j"$(nproc)" > "$OUT/$name-build.log" 2>&1 \
+  # KEEP_GOING=1: don't stop at the first failing file - report every error in
+  # one run (for porting rounds; the artifact checks below still gate success).
+  cmake --build "$bdir" -j"$(nproc)" ${KEEP_GOING:+-- -k 0} > "$OUT/$name-build.log" 2>&1 \
     || { echo "!! $name: build failed:"; grep -nE 'error:|FAILED' "$OUT/$name-build.log" | head; exit 1; }
   KODI_SRC="$FORK" BUILD="$bdir" STAGE="$sdir" TITLE_ID="$tid" TITLE_NAME="$tname" \
     bash "$SCRIPTS/30-deploy.sh" > "$OUT/$name-deploy.log" 2>&1

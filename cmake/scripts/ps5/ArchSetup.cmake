@@ -13,7 +13,17 @@ set(CORE_MAIN_SOURCE ${CMAKE_SOURCE_DIR}/xbmc/platform/ps5/main.cpp)
 # guard that spot with !defined(TARGET_PS5) rather than dropping the define.
 # HAS_FILESYSTEM_SMB2: smb:// on libsmb2 (xbmc/platform/ps5/filesystem) -
 # Kodi's usual SMB backend needs libsmbclient, which the console lacks.
-set(ARCH_DEFINES -DTARGET_POSIX -DTARGET_FREEBSD -DTARGET_PS5 -DHAS_FILESYSTEM_SMB2)
+# The same platform sources build against Kodi 21 (ps5mc-omega) and 22
+# (ps5mc-piers). Where an API changed (not just moved), the code checks
+# PS5_KODI_MAJOR, read here from the Kodi tree's own version.txt.
+file(STRINGS "${CMAKE_SOURCE_DIR}/version.txt" _ps5_major_line REGEX "^VERSION_MAJOR ")
+string(REGEX REPLACE "^VERSION_MAJOR +" "" PS5_KODI_MAJOR "${_ps5_major_line}")
+unset(_ps5_major_line)
+if(NOT PS5_KODI_MAJOR MATCHES "^[0-9]+$")
+  message(FATAL_ERROR "ps5: could not read VERSION_MAJOR from version.txt")
+endif()
+set(ARCH_DEFINES -DTARGET_POSIX -DTARGET_FREEBSD -DTARGET_PS5 -DHAS_FILESYSTEM_SMB2
+                 -DPS5_KODI_MAJOR=${PS5_KODI_MAJOR})
 set(SYSTEM_DEFINES -D__STDC_CONSTANT_MACROS -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64)
 set(PLATFORM_DIR platform/ps5)
 set(PLATFORMDEFS_DIR platform/posix)

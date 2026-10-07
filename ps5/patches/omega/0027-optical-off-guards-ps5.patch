@@ -1,0 +1,112 @@
+From 4caa06f38828e62b76714adf1aec0c9352fad269 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Wed, 7 Oct 2026 12:49:59 +0000
+Subject: [PATCH] ps5(omega): build with ENABLE_OPTICAL off - guard the
+ optical-only includes Kodi 21 left bare (backport of Kodi 22's guards)
+
+---
+ xbmc/filesystem/DirectoryFactory.cpp          | 2 ++
+ xbmc/filesystem/FileFactory.cpp               | 2 ++
+ xbmc/music/MusicDatabase.cpp                  | 4 ++++
+ xbmc/music/tags/CMakeLists.txt                | 7 +++++--
+ xbmc/music/tags/MusicInfoTagLoaderFactory.cpp | 2 ++
+ 5 files changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/xbmc/filesystem/DirectoryFactory.cpp b/xbmc/filesystem/DirectoryFactory.cpp
+index 4cb4e002c2..4c9f4afadc 100644
+--- a/xbmc/filesystem/DirectoryFactory.cpp
++++ b/xbmc/filesystem/DirectoryFactory.cpp
+@@ -48,7 +48,9 @@
+ #elif defined(HAS_FILESYSTEM_SMB2)
+ #include "platform/ps5/filesystem/SMB2Directory.h"
+ #endif
++#ifdef HAS_OPTICAL_DRIVE
+ #include "CDDADirectory.h"
++#endif // HAS_OPTICAL_DRIVE
+ #include "PluginDirectory.h"
+ #if defined(HAS_ISO9660PP)
+ #include "ISO9660Directory.h"
+diff --git a/xbmc/filesystem/FileFactory.cpp b/xbmc/filesystem/FileFactory.cpp
+index 479bdf900e..bc7273ed1b 100644
+--- a/xbmc/filesystem/FileFactory.cpp
++++ b/xbmc/filesystem/FileFactory.cpp
+@@ -28,7 +28,9 @@
+ #elif defined(HAS_FILESYSTEM_SMB2)
+ #include "platform/ps5/filesystem/SMB2File.h"
+ #endif
++#ifdef HAS_OPTICAL_DRIVE
+ #include "CDDAFile.h"
++#endif // HAS_OPTICAL_DRIVE
+ #if defined(HAS_ISO9660PP)
+ #include "ISO9660File.h"
+ #endif
+diff --git a/xbmc/music/MusicDatabase.cpp b/xbmc/music/MusicDatabase.cpp
+index 0ae70eea6b..2df07714a8 100644
+--- a/xbmc/music/MusicDatabase.cpp
++++ b/xbmc/music/MusicDatabase.cpp
+@@ -44,7 +44,9 @@
+ #include "music/MusicLibraryQueue.h"
+ #include "music/tags/MusicInfoTag.h"
+ #include "network/Network.h"
++#ifdef HAS_OPTICAL_DRIVE
+ #include "network/cddb.h"
++#endif // HAS_OPTICAL_DRIVE
+ #include "playlists/SmartPlayList.h"
+ #include "profiles/ProfileManager.h"
+ #include "settings/AdvancedSettings.h"
+@@ -74,8 +76,10 @@ using KODI::MESSAGING::HELPERS::DialogResponse;
+ #define RECENTLY_PLAYED_LIMIT 25
+ #define MIN_FULL_SEARCH_LENGTH 3
+ 
++#ifdef HAS_OPTICAL_DRIVE
+ #ifdef HAS_OPTICAL_DRIVE
+ using namespace CDDB;
++#endif // HAS_OPTICAL_DRIVE
+ using namespace MEDIA_DETECT;
+ #endif
+ 
+diff --git a/xbmc/music/tags/CMakeLists.txt b/xbmc/music/tags/CMakeLists.txt
+index bbd3462ccd..63f352dfc7 100644
+--- a/xbmc/music/tags/CMakeLists.txt
++++ b/xbmc/music/tags/CMakeLists.txt
+@@ -1,5 +1,4 @@
+ set(SOURCES MusicInfoTag.cpp
+-            MusicInfoTagLoaderCDDA.cpp
+             MusicInfoTagLoaderDatabase.cpp
+             MusicInfoTagLoaderFactory.cpp
+             MusicInfoTagLoaderFFmpeg.cpp
+@@ -10,7 +9,6 @@ set(SOURCES MusicInfoTag.cpp
+ 
+ set(HEADERS ImusicInfoTagLoader.h
+             MusicInfoTag.h
+-            MusicInfoTagLoaderCDDA.h
+             MusicInfoTagLoaderDatabase.h
+             MusicInfoTagLoaderFactory.h
+             MusicInfoTagLoaderFFmpeg.h
+@@ -19,4 +17,9 @@ set(HEADERS ImusicInfoTagLoader.h
+             TagLibVFSStream.h
+             TagLoaderTagLib.h)
+ 
++if(ENABLE_OPTICAL)
++  list(APPEND SOURCES MusicInfoTagLoaderCDDA.cpp)
++  list(APPEND HEADERS MusicInfoTagLoaderCDDA.h)
++endif()
++
+ core_add_library(music_tags)
+diff --git a/xbmc/music/tags/MusicInfoTagLoaderFactory.cpp b/xbmc/music/tags/MusicInfoTagLoaderFactory.cpp
+index 562068ee95..b574944bc7 100644
+--- a/xbmc/music/tags/MusicInfoTagLoaderFactory.cpp
++++ b/xbmc/music/tags/MusicInfoTagLoaderFactory.cpp
+@@ -9,7 +9,9 @@
+ #include "MusicInfoTagLoaderFactory.h"
+ 
+ #include "FileItem.h"
++#ifdef HAS_OPTICAL_DRIVE
+ #include "MusicInfoTagLoaderCDDA.h"
++#endif // HAS_OPTICAL_DRIVE
+ #include "MusicInfoTagLoaderDatabase.h"
+ #include "MusicInfoTagLoaderFFmpeg.h"
+ #include "MusicInfoTagLoaderShn.h"
+-- 
+2.43.0
+
