@@ -224,6 +224,81 @@ int RemoveTree(const std::string& path)
     ++removed;
   return removed;
 }
+// Recursively copy src -> dst (files, dirs, symlinks). Returns false on the
+// first failure, leaving a partial dst (the caller treats that as "retry next
+// run" via the migration marker, never as a finished home).
+bool CopyTree(const std::string& src, const std::string& dst)
+{
+  struct stat st;
+  if (lstat(src.c_str(), &st) != 0)
+    return false;
+  if (S_ISLNK(st.st_mode))
+  {
+    char target[1024];
+    const ssize_t n = readlink(src.c_str(), target, sizeof target - 1);
+    if (n < 0)
+      return false;
+    target[n] = '\0';
+    unlink(dst.c_str());
+    return symlink(target, dst.c_str()) == 0;
+  }
+  if (S_ISDIR(st.st_mode))
+  {
+    if (mkdir(dst.c_str(), 0777) != 0 && errno != EEXIST)
+      return false;
+    DIR* dir = opendir(src.c_str());
+    if (!dir)
+      return false;
+    bool ok = true;
+    while (struct dirent* e = readdir(dir))
+    {
+      if (!std::strcmp(e->d_name, ".") || !std::strcmp(e->d_name, ".."))
+        continue;
+      if (!CopyTree(src + "/" + e->d_name, dst + "/" + e->d_name))
+      {
+        ok = false;
+        break;
+      }
+    }
+    closedir(dir);
+    return ok;
+  }
+  if (!S_ISREG(st.st_mode))
+    return true; // skip sockets/devices; nothing Kodi writes
+  const int in = open(src.c_str(), O_RDONLY);
+  if (in < 0)
+    return false;
+  const int out = open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+  if (out < 0)
+  {
+    close(in);
+    return false;
+  }
+  char buf[65536];
+  ssize_t r;
+  bool ok = true;
+  while ((r = read(in, buf, sizeof buf)) > 0)
+  {
+    ssize_t off = 0;
+    while (off < r)
+    {
+      const ssize_t w = write(out, buf + off, static_cast<size_t>(r - off));
+      if (w <= 0)
+      {
+        ok = false;
+        break;
+      }
+      off += w;
+    }
+    if (!ok)
+      break;
+  }
+  if (r < 0)
+    ok = false;
+  close(in);
+  close(out);
+  return ok;
+}
 // END-FS-HELPERS
 
 bool MakeDirs(const std::string& path)
@@ -311,6 +386,53 @@ bool ProbeHome(const std::string& home)
   Klogf("[kodi-ps5]   %s is usable\n", home.c_str());
   return true;
 }
+/*
+ * One-time move of an earlier /download0/.kodi install into the /data home.
+ * Safe by construction:
+ *   - runs only when dst has no settings yet AND src has a real install;
+ *   - copies, verifies, writes a .migrated marker, THEN deletes the source. A
+ *     failure leaves the marker absent, so a partial dst is redone next run
+ *     rather than trusted;
+ *   - with the marker present it never runs again, so it cannot overwrite the
+ *     live /data home with a stale /download0.
+ */
+void MigrateHome(const std::string& srcHome, const std::string& dstHome)
+{
+  const std::string src = srcHome + "/.kodi";
+  const std::string dst = dstHome + "/.kodi";
+  const std::string marker = dst + "/.migrated-from-download0";
+  struct stat st;
+  if (lstat(marker.c_str(), &st) == 0)
+    return; // already migrated once
+  // dst already a real home: leave it, just mark done so we never reconsider.
+  if (lstat((dst + "/userdata/guisettings.xml").c_str(), &st) == 0)
+  {
+    const int fd = open(marker.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd >= 0)
+      close(fd);
+    return;
+  }
+  // Nothing to migrate unless the old location holds a real install.
+  if (lstat((src + "/userdata/guisettings.xml").c_str(), &st) != 0)
+    return;
+  Klogf("[kodi-ps5] migrating %s -> %s\n", src.c_str(), dst.c_str());
+  MakeDirs(dst); // ensure the destination tree exists before copying into it
+  if (!CopyTree(src, dst))
+  {
+    Klogf("[kodi-ps5]   migration copy failed; keeping %s, will retry next run\n", src.c_str());
+    return;
+  }
+  if (lstat((dst + "/userdata/guisettings.xml").c_str(), &st) != 0)
+  {
+    Klogf("[kodi-ps5]   migration incomplete (dst guisettings.xml missing); will retry\n");
+    return;
+  }
+  const int fd = open(marker.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (fd >= 0)
+    close(fd);
+  const int removed = RemoveTree(src);
+  Klogf("[kodi-ps5]   migration complete; removed %d files/folders of %s\n", removed, src.c_str());
+}
 } // namespace
 
 // Switch files in the title folder. access() is refused inside the title
@@ -361,19 +483,25 @@ int main(int argc, char* argv[])
   //                   folder can be deleted over FTP
   // Kodi's data lives in its save data, /download0/.kodi (see the HOME choice
   // below); these wipe that, not the read-only /app0 image.
+  auto wipeAllHomes = []() {
+    // Clear .kodi from every place a home can be: the title's save data and
+    // both /data per-version homes (whichever this install actually used).
+    return RemoveTree("/download0/.kodi") + RemoveTree("/data/ps5mc/kodi22/.kodi") +
+           RemoveTree("/data/ps5mc/kodi21/.kodi");
+  };
   if (SwitchPresent("/app0/kodi-uninstall"))
   {
-    const int n = RemoveTree("/download0/.kodi");
+    const int n = wipeAllHomes();
     unlink("/app0/kodi-uninstall");
-    Klogf("[kodi-ps5] kodi-uninstall found: removed %d files and folders of /download0/.kodi, "
+    Klogf("[kodi-ps5] kodi-uninstall found: removed %d files and folders of Kodi's data, "
           "quitting\n", n);
     _exit(0);
   }
   if (SwitchPresent("/app0/kodi-reset"))
   {
-    const int n = RemoveTree("/download0/.kodi");
+    const int n = wipeAllHomes();
     unlink("/app0/kodi-reset");
-    Klogf("[kodi-ps5] kodi-reset found: removed %d files and folders of /download0/.kodi\n", n);
+    Klogf("[kodi-ps5] kodi-reset found: removed %d files and folders of Kodi's data\n", n);
   }
 
   // kodi-jitprobe: one-shot diagnostic. Tests whether this title can obtain
@@ -410,12 +538,29 @@ int main(int argc, char* argv[])
   }
   else
   {
-    chosen = "/download0";
-    if (SwitchPresent("/app0/kodi-home-data") && ProbeHome("/data/kodi"))
-      chosen = "/data/kodi";
-    if (!ProbeHome(chosen.c_str()))
-      Klogf("[kodi-ps5] %s is not writable; Kodi will fail to start (is downloadDataSize set in "
-            "param.json?)\n", chosen.c_str());
+    // Prefer /data, which ShadowMountPlus 1.7beta4+ mounts into the sandbox
+    // (no Lapy/etaHEN daemon needed): a per-version home so the Kodi 22 and 21
+    // builds keep separate libraries. Fall back silently to the title's own
+    // save data (/download0) when /data is not writable - an older loader, or
+    // SM+ not yet up. kodi-home-download0 forces the fallback for testing.
+#if PS5_KODI_MAJOR >= 22
+    const char* kDataHome = "/data/ps5mc/kodi22";
+#else
+    const char* kDataHome = "/data/ps5mc/kodi21";
+#endif
+    const bool forceDownload0 = SwitchPresent("/app0/kodi-home-download0");
+    if (!forceDownload0 && MakeDirs(kDataHome) && ProbeHome(kDataHome))
+    {
+      chosen = kDataHome;
+      MigrateHome("/download0", chosen); // one-time, from an earlier /download0 install
+    }
+    else
+    {
+      chosen = "/download0";
+      if (!ProbeHome(chosen.c_str()))
+        Klogf("[kodi-ps5] %s is not writable; Kodi will fail to start (is downloadDataSize set in "
+              "param.json?)\n", chosen.c_str());
+    }
     Klogf("[kodi-ps5] HOME=%s\n", chosen.c_str());
     setenv("HOME", chosen.c_str(), 1);
   }
