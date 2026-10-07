@@ -28,7 +28,9 @@
 #elif defined(HAS_FILESYSTEM_SMB2)
 #include "platform/ps5/filesystem/SMB2File.h"
 #endif
+#ifdef HAS_OPTICAL_DRIVE
 #include "CDDAFile.h"
+#endif // HAS_OPTICAL_DRIVE
 #if defined(HAS_ISO9660PP)
 #include "ISO9660File.h"
 #endif

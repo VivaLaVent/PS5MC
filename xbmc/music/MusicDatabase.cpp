@@ -44,7 +44,9 @@
 #include "music/MusicLibraryQueue.h"
 #include "music/tags/MusicInfoTag.h"
 #include "network/Network.h"
+#ifdef HAS_OPTICAL_DRIVE
 #include "network/cddb.h"
+#endif // HAS_OPTICAL_DRIVE
 #include "playlists/SmartPlayList.h"
 #include "profiles/ProfileManager.h"
 #include "settings/AdvancedSettings.h"
@@ -75,7 +77,9 @@ using KODI::MESSAGING::HELPERS::DialogResponse;
 #define MIN_FULL_SEARCH_LENGTH 3
 
 #ifdef HAS_OPTICAL_DRIVE
+#ifdef HAS_OPTICAL_DRIVE
 using namespace CDDB;
+#endif // HAS_OPTICAL_DRIVE
 using namespace MEDIA_DETECT;
 #endif
 
