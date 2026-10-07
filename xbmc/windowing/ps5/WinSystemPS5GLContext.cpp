@@ -290,6 +290,11 @@ CHDRCapabilities CWinSystemPS5GLContext::GetDisplayHDRCapabilities() const
   return caps;
 }
 
+#if PS5_KODI_MAJOR >= 22
+// Kodi 22's HDR GUI-compositing hooks (menus drawn over HDR video at reference
+// white). Kodi 21 has no such pipeline: its core never calls these, and its
+// base classes have no virtuals to override. HDR video (BindTarget / SetHDR /
+// Pack) does not depend on them.
 bool CWinSystemPS5GLContext::SetGuiCompositing(int colorTransfer)
 {
   return m_hdr.SetGuiCompositing(colorTransfer, UseLimitedColor());
@@ -297,12 +302,8 @@ bool CWinSystemPS5GLContext::SetGuiCompositing(int colorTransfer)
 
 bool CWinSystemPS5GLContext::BeginGuiComposite(bool guiWillRender)
 {
-#if PS5_KODI_MAJOR >= 22
   return m_hdr.BeginGuiComposite(guiWillRender, m_nWidth, m_nHeight,
                                  GetEnabledFrontToBackRendering());
-#else // Kodi 21 has no front-to-back GUI rendering: no depth buffer
-  return m_hdr.BeginGuiComposite(guiWillRender, m_nWidth, m_nHeight, false);
-#endif
 }
 
 void CWinSystemPS5GLContext::EndGuiComposite()
@@ -314,6 +315,7 @@ void CWinSystemPS5GLContext::CompositeGui()
 {
   m_hdr.CompositeGui(GetGUIElementCount());
 }
+#endif // PS5_KODI_MAJOR >= 22
 
 void CWinSystemPS5GLContext::PresentRender(bool rendered, bool videoLayer)
 {

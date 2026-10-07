@@ -34,6 +34,16 @@ inline void SetIsFolder(CFileItem& item, bool folder)
   item.m_bIsFolder = folder;
 #endif
 }
+
+// Kodi 22 added CFileItem::SetSize(); on Kodi 21 the size is the public m_dwSize.
+inline void SetItemSize(CFileItem& item, int64_t size)
+{
+#if PS5_KODI_MAJOR >= 22
+  item.SetSize(size);
+#else
+  item.m_dwSize = size;
+#endif
+}
 } // namespace
 
 namespace
@@ -91,7 +101,7 @@ bool CSMB2Directory::GetDirectory(const CURL& urlIn, CFileItemList& items)
         URIUtils::AddSlashAtEnd(path);
       item->SetPath(path);
       SetIsFolder(*item, e.stat.isDirectory);
-      item->SetSize(static_cast<int64_t>(e.stat.size));
+      SetItemSize(*item, static_cast<int64_t>(e.stat.size));
       item->SetDateTime(ToLocalFileTime(e.stat.mtime, e.stat.ctime));
       item->SetProperty(DIR_PROPERTY_STAT_MTIME, e.stat.mtime);
       item->SetProperty(DIR_PROPERTY_STAT_CTIME, e.stat.ctime);
