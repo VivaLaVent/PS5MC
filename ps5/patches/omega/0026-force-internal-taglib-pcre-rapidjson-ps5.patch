@@ -1,0 +1,56 @@
+From 6193981b9fcffc54b0dc031962a39f8bbd9d15b1 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Wed, 7 Oct 2026 12:40:55 +0000
+Subject: [PATCH] ps5(omega): TagLib/PCRE/RapidJSON - force the internal build
+ on ps5 as on linux/freebsd (a re-run otherwise finds the previous run's
+ internal copy by version, takes the system path, and its re-rooted
+ find_library fails)
+
+---
+ cmake/modules/FindPCRE.cmake      | 2 +-
+ cmake/modules/FindRapidJSON.cmake | 2 +-
+ cmake/modules/FindTagLib.cmake    | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/cmake/modules/FindPCRE.cmake b/cmake/modules/FindPCRE.cmake
+index 811aa3fcb2..85a0237e15 100644
+--- a/cmake/modules/FindPCRE.cmake
++++ b/cmake/modules/FindPCRE.cmake
+@@ -66,7 +66,7 @@ if(NOT PCRE::pcre)
+                            ${${CORE_PLATFORM_NAME_LC}_SEARCH_CONFIG})
+ 
+   if((PCRE_VERSION VERSION_LESS ${${MODULE}_VER} AND ENABLE_INTERNAL_PCRE) OR
+-     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd) AND ENABLE_INTERNAL_PCRE))
++     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd OR CORE_SYSTEM_NAME STREQUAL ps5) AND ENABLE_INTERNAL_PCRE))
+ 
+     buildPCRE()
+ 
+diff --git a/cmake/modules/FindRapidJSON.cmake b/cmake/modules/FindRapidJSON.cmake
+index df34eff2b2..38c8c64c8a 100644
+--- a/cmake/modules/FindRapidJSON.cmake
++++ b/cmake/modules/FindRapidJSON.cmake
+@@ -54,7 +54,7 @@ if(NOT TARGET RapidJSON::RapidJSON)
+   # Check for existing RAPIDJSON. If version >= RAPIDJSON-VERSION file version, dont build
+   # A corner case, but if a linux/freebsd user WANTS to build internal tinyxml2, build anyway
+   if((RapidJSON_VERSION VERSION_LESS ${${MODULE}_VER} AND ENABLE_INTERNAL_RapidJSON) OR
+-     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd) AND ENABLE_INTERNAL_RapidJSON))
++     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd OR CORE_SYSTEM_NAME STREQUAL ps5) AND ENABLE_INTERNAL_RapidJSON))
+     # Build internal rapidjson
+     buildrapidjson()
+   else()
+diff --git a/cmake/modules/FindTagLib.cmake b/cmake/modules/FindTagLib.cmake
+index 6a85cc4383..d8eccd9314 100644
+--- a/cmake/modules/FindTagLib.cmake
++++ b/cmake/modules/FindTagLib.cmake
+@@ -67,7 +67,7 @@ if(NOT TARGET TagLib::TagLib)
+   endif()
+ 
+   if((TAGLIBCONFIG_VER VERSION_LESS ${${MODULE}_VER} AND ENABLE_INTERNAL_TAGLIB) OR
+-     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd) AND ENABLE_INTERNAL_TAGLIB))
++     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd OR CORE_SYSTEM_NAME STREQUAL ps5) AND ENABLE_INTERNAL_TAGLIB))
+     # Build Taglib
+     buildTagLib()
+   else()
+-- 
+2.43.0
+
