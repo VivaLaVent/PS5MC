@@ -44,6 +44,17 @@ inline void SetItemSize(CFileItem& item, int64_t size)
   item.m_dwSize = size;
 #endif
 }
+
+// Kodi 22 added CFileItem::SetDateTime(); on Kodi 21 it is the public m_dateTime
+// (CDateTime assigns from a FileTime on both versions).
+inline void SetItemDateTime(CFileItem& item, const KODI::TIME::FileTime& time)
+{
+#if PS5_KODI_MAJOR >= 22
+  item.SetDateTime(time);
+#else
+  item.m_dateTime = time;
+#endif
+}
 } // namespace
 
 namespace
@@ -102,7 +113,7 @@ bool CSMB2Directory::GetDirectory(const CURL& urlIn, CFileItemList& items)
       item->SetPath(path);
       SetIsFolder(*item, e.stat.isDirectory);
       SetItemSize(*item, static_cast<int64_t>(e.stat.size));
-      item->SetDateTime(ToLocalFileTime(e.stat.mtime, e.stat.ctime));
+      SetItemDateTime(*item, ToLocalFileTime(e.stat.mtime, e.stat.ctime));
       item->SetProperty(DIR_PROPERTY_STAT_MTIME, e.stat.mtime);
       item->SetProperty(DIR_PROPERTY_STAT_CTIME, e.stat.ctime);
       if (!e.name.empty() && e.name[0] == '.')
