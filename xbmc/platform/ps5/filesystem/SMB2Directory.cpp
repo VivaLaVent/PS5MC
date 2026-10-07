@@ -55,6 +55,17 @@ inline void SetItemDateTime(CFileItem& item, const KODI::TIME::FileTime& time)
   item.m_dateTime = time;
 #endif
 }
+
+// Kodi 22 added CFileItemList::AddItems(); Kodi 21 adds one item at a time.
+inline void AddAllItems(CFileItemList& list, std::vector<std::shared_ptr<CFileItem>>&& items)
+{
+#if PS5_KODI_MAJOR >= 22
+  list.AddItems(std::move(items));
+#else
+  for (auto& item : items)
+    list.Add(std::move(item));
+#endif
+}
 } // namespace
 
 namespace
@@ -114,8 +125,10 @@ bool CSMB2Directory::GetDirectory(const CURL& urlIn, CFileItemList& items)
       SetIsFolder(*item, e.stat.isDirectory);
       SetItemSize(*item, static_cast<int64_t>(e.stat.size));
       SetItemDateTime(*item, ToLocalFileTime(e.stat.mtime, e.stat.ctime));
+#if PS5_KODI_MAJOR >= 22 // raw stat-time properties are new in Kodi 22 (21 neither has nor reads them)
       item->SetProperty(DIR_PROPERTY_STAT_MTIME, e.stat.mtime);
       item->SetProperty(DIR_PROPERTY_STAT_CTIME, e.stat.ctime);
+#endif
       if (!e.name.empty() && e.name[0] == '.')
         item->SetProperty("file:hidden", true);
       fileItems.push_back(std::move(item));
@@ -136,7 +149,7 @@ bool CSMB2Directory::GetDirectory(const CURL& urlIn, CFileItemList& items)
     return false;
   }
 
-  items.AddItems(std::move(fileItems));
+  AddAllItems(items, std::move(fileItems));
   return true;
 }
 
