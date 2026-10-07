@@ -8,6 +8,12 @@
 
 #include "utils/MemUtils.h"
 
+#include <cstdarg>
+#include <cstdio>
+
+extern "C" int sceKernelDebugOutText(int, const char*);
+namespace { void Klogf(const char* fmt, ...) { char b[256]; va_list ap; va_start(ap, fmt); std::vsnprintf(b, sizeof b, fmt, ap); va_end(ap); sceKernelDebugOutText(0, b); } }
+
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
@@ -16,6 +22,27 @@
 #include <sys/types.h>
 
 #include <sys/sysctl.h>
+
+// Kodi's allocations live in one direct-memory heap managed by the ps5-opengl
+// template's app_heap.c, which counts its live bytes. The deploy appends these
+// two accessors to it; the weak versions here keep the plain CMake link of
+// kodi.bin (which does not include the template) working, and lose to the
+// template's strong ones in the eboot.
+extern "C"
+{
+// The direct-memory heap (ps5-opengl's app_heap.c, linked into the eboot by the
+// native-app template, NOT into kodi.bin) publishes its counters here through a
+// constructor. A weak function would not do: kodi.bin is linked whole-archive
+// and its weak 0 can win over the template's strong symbol. A plain pointer is
+// unambiguous - set by the eboot, null everywhere else (plain kodi.bin, tests).
+size_t (*g_ps5_heap_live)(void) = nullptr;
+size_t (*g_ps5_heap_capacity)(void) = nullptr;
+void ps5_register_heap_stats(size_t (*live)(void), size_t (*capacity)(void))
+{
+  g_ps5_heap_live = live;
+  g_ps5_heap_capacity = capacity;
+}
+}
 
 namespace KODI
 {
@@ -59,8 +86,33 @@ void GetMemoryStatus(MemoryStatus* buffer)
       physmem = 5ULL * 1024 * 1024 * 1024;
   }
 
-  buffer->totalPhys = physmem;
-  buffer->availPhys = physmem / 2; // TODO: derive from the process' actual allocation
+  // Report Kodi's heap: its size and how much of it is in use. (The fixed
+  // "half of 5 GiB" this replaced always showed 2560/5120 MB.)
+  const size_t capacity = g_ps5_heap_capacity ? g_ps5_heap_capacity() : 0;
+  if (capacity != 0)
+  {
+    const size_t live = g_ps5_heap_live ? g_ps5_heap_live() : 0;
+    buffer->totalPhys = capacity;
+    buffer->availPhys = live < capacity ? capacity - live : 0;
+    static bool logged = false;
+    if (!logged)
+    {
+      logged = true;
+      Klogf("[kodi-ps5] memory: heap %llu MiB, %llu MiB live\n",
+            static_cast<unsigned long long>(capacity >> 20),
+            static_cast<unsigned long long>(live >> 20));
+    }
+    return;
+  }
+  buffer->totalPhys = physmem; // no heap counters registered: a static estimate
+  buffer->availPhys = physmem / 2;
+  static bool loggedEstimate = false;
+  if (!loggedEstimate)
+  {
+    loggedEstimate = true;
+    Klogf("[kodi-ps5] memory: no heap counters registered; estimating from physmem %llu MiB\n",
+          static_cast<unsigned long long>(physmem >> 20));
+  }
 }
 
 } // namespace MEMORY

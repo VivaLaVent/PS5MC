@@ -1,0 +1,37 @@
+From a45d574ca137785abd0f88a72e637d2ec44b6a60 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Wed, 7 Oct 2026 21:56:13 +0000
+Subject: [PATCH] ps5: decode images with the built-in FFmpeg loader, not
+ binary imagedecoder add-ons (they can't load yet; a failed one left a blank
+ texture - black background/logo on Kodi 21)
+
+---
+ xbmc/guilib/imagefactory.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/xbmc/guilib/imagefactory.cpp b/xbmc/guilib/imagefactory.cpp
+index 81567825f8..b2095e3e8e 100644
+--- a/xbmc/guilib/imagefactory.cpp
++++ b/xbmc/guilib/imagefactory.cpp
+@@ -37,6 +37,7 @@ IImage* ImageFactory::CreateLoader(const CURL& url)
+ 
+ IImage* ImageFactory::CreateLoaderFromMimeType(const std::string& strMimeType)
+ {
++#if !defined(TARGET_PS5)
+   auto addonInfos = CServiceBroker::GetExtsMimeSupportList().GetMimetypeSupportedAddonInfos(
+       strMimeType, CExtsMimeSupportList::FilterSelect::all);
+   for (const auto& addonInfo : addonInfos)
+@@ -54,6 +55,10 @@ IImage* ImageFactory::CreateLoaderFromMimeType(const std::string& strMimeType)
+     }
+     return result.release();
+   }
++#endif // !TARGET_PS5 : binary imagedecoder add-ons cannot load on the in-process
++       // ELF loader yet, and a failed CImageDecoder would yield a blank texture
++       // (black background/logo on Kodi 21, which bundles one). FFmpeg decodes
++       // PNG/JPEG/GIF here, so use it directly.
+ 
+   return new CFFmpegImage(strMimeType);
+ }
+-- 
+2.43.0
+

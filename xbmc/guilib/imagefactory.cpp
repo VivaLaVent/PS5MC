@@ -37,6 +37,7 @@ IImage* ImageFactory::CreateLoader(const CURL& url)
 
 IImage* ImageFactory::CreateLoaderFromMimeType(const std::string& strMimeType)
 {
+#if !defined(TARGET_PS5)
   auto addonInfos = CServiceBroker::GetExtsMimeSupportList().GetMimetypeSupportedAddonInfos(
       strMimeType, CExtsMimeSupportList::FilterSelect::all);
   for (const auto& addonInfo : addonInfos)
@@ -54,6 +55,10 @@ IImage* ImageFactory::CreateLoaderFromMimeType(const std::string& strMimeType)
     }
     return result.release();
   }
+#endif // !TARGET_PS5 : binary imagedecoder add-ons cannot load on the in-process
+       // ELF loader yet, and a failed CImageDecoder would yield a blank texture
+       // (black background/logo on Kodi 21, which bundles one). FFmpeg decodes
+       // PNG/JPEG/GIF here, so use it directly.
 
   return new CFFmpegImage(strMimeType);
 }

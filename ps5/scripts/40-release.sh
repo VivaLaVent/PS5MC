@@ -63,11 +63,18 @@ for v in "${VARIANTS[@]}"; do
   rm -f "$ZIP"; ( cd "$sdir/app/dist" && zip -qr "$ZIP" "$tid" )
   echo "==> $name: $(basename "$ZIP") ($(stat -c%s "$ZIP") bytes, eboot $(stat -c%s "$DIST/eboot.bin") bytes)"
   built+=("$ZIP")
+  # Also a .ffpfsc (ShadowMountPlus PFS image, single file) from the same app
+  # folder, so users can drop one file instead of unzip+copy. Named by title id
+  # (<tid>.ffpfsc) as SM+ expects, then copied to the release asset name.
+  if [ "${NO_FFPFSC:-0}" != 1 ]; then
+    MKPFS=$(REPO_ROOT="$FORK/ps5" bash "$SCRIPTS/lib/mkpfs-setup.sh" 2>"$OUT/$name-ffpfsc.log")       && "$MKPFS" pack folder --no-adjust-output-file-extension --version PS5 --verify            "$DIST" "$sdir/app/dist/$tid.ffpfsc" >>"$OUT/$name-ffpfsc.log" 2>&1       && { FPF="$OUT/PS5MC-$VER-$name-$tid.ffpfsc"; cp "$sdir/app/dist/$tid.ffpfsc" "$FPF";            echo "==> $name: $(basename "$FPF") ($(stat -c%s "$FPF") bytes)"; built+=("$FPF"); }       || { echo "!! $name: .ffpfsc packing failed - see $OUT/$name-ffpfsc.log (zip still produced)";            tail -3 "$OUT/$name-ffpfsc.log"; }
+  fi
 done
 git checkout -q "$START_BRANCH"
 
 echo
-if [ -z "$ONLY" ] && [ "${#built[@]}" -ne 2 ]; then echo "!! expected 2 zips, have ${#built[@]} - not publishing"; exit 1; fi
+zipcount=0; for a in "${built[@]}"; do [ "${a##*.}" = zip ] && zipcount=$((zipcount+1)); done
+if [ -z "$ONLY" ] && [ "$zipcount" -ne 2 ]; then echo "!! expected 2 builds (kodi22 + kodi21), have $zipcount - not publishing"; exit 1; fi
 if [ "$PUBLISH" = 1 ]; then
   [ -z "$ONLY" ] || { echo "!! ONLY= builds are never published"; exit 1; }
   NOTES="$FORK/ps5/docs/release-notes/$VER.md"
