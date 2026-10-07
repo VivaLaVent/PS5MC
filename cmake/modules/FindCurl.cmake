@@ -52,6 +52,13 @@ find_package_handle_standard_args(Curl
 if(CURL_FOUND)
   set(CURL_INCLUDE_DIRS ${CURL_INCLUDE_DIR})
   set(CURL_LIBRARIES ${CURL_LIBRARY} ${NGHTTP2_LIBRARY})
+  # ps5: a static curl's own dependencies (zstd, libpsl, ssl, ...) are in
+  # pkg-config's Libs.private. Kodi 21 computes them (CURL_LDFLAGS, above) but
+  # never links them; Kodi 22 gets them through pkg-config's imported target.
+  # Appended after libcurl.a, as a static link needs.
+  if(CURL_LIB_TYPE STREQUAL STATIC AND CORE_SYSTEM_NAME STREQUAL ps5)
+    list(APPEND CURL_LIBRARIES ${CURL_LDFLAGS})
+  endif()
 
   if(NOT TARGET Curl::Curl)
     add_library(Curl::Curl ${CURL_LIB_TYPE} IMPORTED)
