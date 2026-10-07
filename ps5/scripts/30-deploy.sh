@@ -133,17 +133,15 @@ s = s.replace('size=%u\\n",', 'size=%llu\\n",')
 if "ps5_heap_live_bytes" not in s:
     sys.exit("app_heap.c: no live-byte counter to expose")
 s += """
-/* Publish the heap counters to Kodi's MemUtils (system-info memory figure).
- * A constructor registers them, so there is no weak/strong symbol contest with
- * kodi.bin (which is linked whole-archive). */
-static size_t ps5_heap_live_fn(void) {
+/* Heap counters for Kodi's MemUtils (system-info memory figure). Exposed as
+ * plain strong symbols that MemUtils looks up lazily with dlsym at first use -
+ * NOT via a constructor (a constructor ran during C++ static init, before the
+ * runtime was ready, and faulted: SIGSEGV in ios_base::Init). These names are
+ * unique to the eboot; kodi.bin provides weak fallbacks. */
+size_t ps5_heap_live_bytes_value(void) {
   return atomic_load_explicit(&ps5_heap_live_bytes, memory_order_relaxed);
 }
-static size_t ps5_heap_capacity_fn(void) { return PS5_OPENGL_HEAP_SIZE; }
-extern void ps5_register_heap_stats(size_t (*live)(void), size_t (*capacity)(void));
-__attribute__((constructor)) static void ps5_publish_heap_stats(void) {
-  ps5_register_heap_stats(ps5_heap_live_fn, ps5_heap_capacity_fn);
-}
+size_t ps5_heap_capacity_value(void) { return PS5_OPENGL_HEAP_SIZE; }
 """
 open(p, "w").write(s)
 PY
