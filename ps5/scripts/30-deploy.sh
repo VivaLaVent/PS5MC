@@ -291,8 +291,9 @@ PY
 cp "$HERE/title/sce_sys/icon0.png" "$APP/sce_sys/icon0.png" || { echo "!! title/sce_sys/icon0.png missing"; exit 1; }
 # Home-screen artwork: the template carries the GL demo's backgrounds and
 # music. Use ours from title/sce_sys if present, otherwise ship none (the
-# shell then shows its default). We ship pic1 (the launch/background image)
-# only - no pic0; the tester confirmed the title boots fine without pic0.
+# shell then shows its default). The template requires BOTH pic0 and pic1 (or
+# neither), so we ship the one splash as both - same image for the launch
+# transition and the selected-app background.
 #
 # pic1 (and optionally pic0) is per-version: pic1-kodi${PS5MC_MAJOR}.dds is used
 # when present, so each release ships only its own splash; a generic pic1.dds is
@@ -326,7 +327,8 @@ PY
 }
 if [ -f "$pic1" ] && reason=$(dds_ok "$pic1"); then
   cp "$pic1" "$APP/sce_sys/pic1.dds"
-  echo "    backgrounds: $(basename "$pic1") (pic1 only, no pic0)"
+  cp "$pic1" "$APP/sce_sys/pic0.dds"   # template requires both; use the splash for both
+  echo "    backgrounds: $(basename "$pic1") (pic0 + pic1)"
 elif [ -f "$pic1" ]; then
   echo "    backgrounds: SKIPPED - $(basename "$pic1") is not a valid pic ($reason); shipping none"
 else

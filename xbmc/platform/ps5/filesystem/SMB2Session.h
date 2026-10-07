@@ -65,6 +65,7 @@ enum class Error
   None,
   NotFound,
   AccessDenied, // wrong or missing credentials: ask the user
+  LockedOut,    // server locked the account (too many bad logins): do NOT retry
   Network,      // host unreachable, connection lost, timeout
   Other,
 };
