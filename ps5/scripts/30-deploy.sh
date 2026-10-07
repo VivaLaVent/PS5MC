@@ -291,8 +291,8 @@ PY
 cp "$HERE/title/sce_sys/icon0.png" "$APP/sce_sys/icon0.png" || { echo "!! title/sce_sys/icon0.png missing"; exit 1; }
 # Home-screen artwork: the template carries the GL demo's backgrounds and
 # music. Use ours from title/sce_sys if present, otherwise ship none (the
-# shell then shows its default). pic0 = selected-app background, pic1 =
-# launch transition; the system requires both or neither.
+# shell then shows its default). We ship pic1 (the launch/background image)
+# only - no pic0; the tester confirmed the title boots fine without pic0.
 #
 # pic1 (and optionally pic0) is per-version: pic1-kodi${PS5MC_MAJOR}.dds is used
 # when present, so each release ships only its own splash; a generic pic1.dds is
@@ -302,11 +302,6 @@ PS5MC_MAJOR="$(sed -n 's/^VERSION_MAJOR *//p' "$KODI_SRC/version.txt" 2>/dev/nul
 SCE="$HERE/title/sce_sys"
 pic1="$SCE/pic1.dds"
 [ -f "$SCE/pic1-kodi${PS5MC_MAJOR}.dds" ] && pic1="$SCE/pic1-kodi${PS5MC_MAJOR}.dds"
-pic0="$SCE/pic0.dds"
-[ -f "$SCE/pic0-kodi${PS5MC_MAJOR}.dds" ] && pic0="$SCE/pic0-kodi${PS5MC_MAJOR}.dds"
-# pic0 is optional; when only a splash is provided, reuse it for both so the
-# "both or neither" rule is satisfied with one image.
-[ -f "$pic0" ] || pic0="$pic1"
 # The template requires each pic to be exactly 3840x2160 BC7_UNORM DX10 2D with
 # no mip chain, and FAILS the whole build (no eboot) on anything else. Validate
 # here and skip a bad splash with a warning instead, so artwork never blocks a
@@ -329,10 +324,9 @@ except Exception as e:
     print(e); sys.exit(1)
 PY
 }
-if [ -f "$pic1" ] && reason=$(dds_ok "$pic1") && { [ ! -f "$pic0" ] || dds_ok "$pic0" >/dev/null; }; then
+if [ -f "$pic1" ] && reason=$(dds_ok "$pic1"); then
   cp "$pic1" "$APP/sce_sys/pic1.dds"
-  cp "$pic0" "$APP/sce_sys/pic0.dds"
-  echo "    backgrounds: $(basename "$pic1") (pic1) + $(basename "$pic0") (pic0)"
+  echo "    backgrounds: $(basename "$pic1") (pic1 only, no pic0)"
 elif [ -f "$pic1" ]; then
   echo "    backgrounds: SKIPPED - $(basename "$pic1") is not a valid pic ($reason); shipping none"
 else
