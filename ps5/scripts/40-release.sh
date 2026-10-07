@@ -31,7 +31,7 @@ START_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 # variant: name  branch        title-id   on-screen name        build dir              stage dir
 VARIANTS=(
-  "kodi22 ps5mc-piers PPSA99420 PS5MC            $HOME/ps5mc-build-22 $HOME/ps5mc-stage-22"
+  "kodi22 ps5mc-piers PPSA99420 PS5MC_(Kodi_22)  $HOME/ps5mc-build-22 $HOME/ps5mc-stage-22"
   "kodi21 ps5mc-omega PPSA99421 PS5MC_(Kodi_21)  $HOME/ps5mc-build-21 $HOME/ps5mc-stage-21"
 )
 

@@ -128,6 +128,23 @@ s = s.replace(mmap_call, "ps5_heap_map(PS5_OPENGL_HEAP_SIZE);")
 s = s.replace("munmap(base, PS5_OPENGL_HEAP_SIZE);", "ps5_heap_unmap(base, PS5_OPENGL_HEAP_SIZE);")
 s = s.replace("#define PS5_OPENGL_HEAP_SIZE", "void *ps5_heap_map(size_t size);\nint ps5_heap_unmap(void *address, size_t size);\n#define PS5_OPENGL_HEAP_SIZE", 1)
 s = s.replace('size=%u\\n",', 'size=%llu\\n",')
+# Expose the heap's own live-byte counter, so Kodi's system-info memory figure
+# reports how full Kodi's heap really is (MemUtils.cpp; weak 0 fallbacks there).
+if "ps5_heap_live_bytes" not in s:
+    sys.exit("app_heap.c: no live-byte counter to expose")
+s += """
+/* Publish the heap counters to Kodi's MemUtils (system-info memory figure).
+ * A constructor registers them, so there is no weak/strong symbol contest with
+ * kodi.bin (which is linked whole-archive). */
+static size_t ps5_heap_live_fn(void) {
+  return atomic_load_explicit(&ps5_heap_live_bytes, memory_order_relaxed);
+}
+static size_t ps5_heap_capacity_fn(void) { return PS5_OPENGL_HEAP_SIZE; }
+extern void ps5_register_heap_stats(size_t (*live)(void), size_t (*capacity)(void));
+__attribute__((constructor)) static void ps5_publish_heap_stats(void) {
+  ps5_register_heap_stats(ps5_heap_live_fn, ps5_heap_capacity_fn);
+}
+"""
 open(p, "w").write(s)
 PY
 grep -q -- "--wrap=malloc" "$APP/tools/build.sh" || { echo "!! template build.sh has no malloc wraps"; exit 1; }
@@ -277,13 +294,27 @@ cp "$HERE/title/sce_sys/icon0.png" "$APP/sce_sys/icon0.png" || { echo "!! title/
 # Home-screen artwork: the template carries the GL demo's backgrounds and
 # music. Use ours from title/sce_sys if present, otherwise ship none (the
 # shell then shows its default). pic0 = selected-app background, pic1 =
-# launch transition; the builder requires both or neither.
+# launch transition; the system requires both or neither.
+#
+# pic1 (and optionally pic0) is per-version: pic1-kodi${PS5MC_MAJOR}.dds is used
+# when present, so each release ships only its own splash; a generic pic1.dds is
+# the fallback. PS5MC_MAJOR is read from the Kodi tree the deploy is building.
 rm -f "$APP/sce_sys/pic0.dds" "$APP/sce_sys/pic1.dds" "$APP/sce_sys/snd0.at9"
-if [ -f "$HERE/title/sce_sys/pic0.dds" ] && [ -f "$HERE/title/sce_sys/pic1.dds" ]; then
-  cp "$HERE/title/sce_sys/pic0.dds" "$HERE/title/sce_sys/pic1.dds" "$APP/sce_sys/"
-  echo "    backgrounds: title/sce_sys/pic0.dds + pic1.dds"
+PS5MC_MAJOR="$(sed -n 's/^VERSION_MAJOR *//p' "$KODI_SRC/version.txt" 2>/dev/null)"
+SCE="$HERE/title/sce_sys"
+pic1="$SCE/pic1.dds"
+[ -f "$SCE/pic1-kodi${PS5MC_MAJOR}.dds" ] && pic1="$SCE/pic1-kodi${PS5MC_MAJOR}.dds"
+pic0="$SCE/pic0.dds"
+[ -f "$SCE/pic0-kodi${PS5MC_MAJOR}.dds" ] && pic0="$SCE/pic0-kodi${PS5MC_MAJOR}.dds"
+# pic0 is optional; when only a splash is provided, reuse it for both so the
+# "both or neither" rule is satisfied with one image.
+[ -f "$pic0" ] || pic0="$pic1"
+if [ -f "$pic1" ]; then
+  cp "$pic1" "$APP/sce_sys/pic1.dds"
+  cp "$pic0" "$APP/sce_sys/pic0.dds"
+  echo "    backgrounds: $(basename "$pic1") (pic1) + $(basename "$pic0") (pic0)"
 else
-  echo "    backgrounds: none (add pic0.dds + pic1.dds to title/sce_sys to set them)"
+  echo "    backgrounds: none (add pic1-kodi${PS5MC_MAJOR}.dds or pic1.dds to title/sce_sys)"
 fi
 [ -f "$HERE/title/sce_sys/snd0.at9" ] && cp "$HERE/title/sce_sys/snd0.at9" "$APP/sce_sys/"
 
