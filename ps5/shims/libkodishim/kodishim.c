@@ -88,6 +88,7 @@ void explicit_bzero(void* buf, size_t len)
  * changes in a sandboxed title.
  * ---------------------------------------------------------------------- */
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -237,3 +238,61 @@ struct servent;
 __attribute__((weak)) struct servent* getservbyname(const char* n, const char* p) { (void)n;(void)p; return NULL; }
 __attribute__((weak)) const char* hstrerror(int e) { (void)e; return "Unknown host error"; }
 __attribute__((weak)) char* strsignal(int s) { (void)s; return (char*)"Unknown signal"; }
+
+/* getdelim / getline (POSIX 2008). Kodi 21's PosixTimezone.cpp reads the zone
+ * tables with getdelim(), which the title's libc does not export (Kodi 22
+ * rewrote that file). Weak, like the shims above: a real libc symbol wins.
+ * Uses fgetc(), never the FreeBSD headers' getc() macro, whose inline stdio
+ * internals do not match the title's clean-room libc FILE layout. */
+__attribute__((weak)) ssize_t getdelim(char** linep, size_t* capp, int delim, FILE* stream)
+{
+  if (!linep || !capp || !stream)
+  {
+    errno = EINVAL;
+    return -1;
+  }
+  if (!*linep || *capp == 0)
+  {
+    char* p = realloc(*linep, 128);
+    if (!p)
+    {
+      errno = ENOMEM;
+      return -1;
+    }
+    *linep = p;
+    *capp = 128;
+  }
+  size_t len = 0;
+  for (;;)
+  {
+    const int ch = fgetc(stream);
+    if (ch == EOF)
+    {
+      if (len == 0)
+        return -1;
+      break;
+    }
+    if (len + 2 > *capp)
+    {
+      const size_t cap = *capp * 2;
+      char* p = realloc(*linep, cap);
+      if (!p)
+      {
+        errno = ENOMEM;
+        return -1;
+      }
+      *linep = p;
+      *capp = cap;
+    }
+    (*linep)[len++] = (char)ch;
+    if (ch == delim)
+      break;
+  }
+  (*linep)[len] = '\0';
+  return (ssize_t)len;
+}
+
+__attribute__((weak)) ssize_t getline(char** linep, size_t* capp, FILE* stream)
+{
+  return getdelim(linep, capp, '\n', stream);
+}

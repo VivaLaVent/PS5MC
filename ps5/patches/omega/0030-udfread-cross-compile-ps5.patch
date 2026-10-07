@@ -1,0 +1,45 @@
+From 73ae019ba19aab47780418bea41448b856341b06 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Wed, 7 Oct 2026 14:21:49 +0000
+Subject: [PATCH] ps5(omega): libudfread - cross-compile it
+ (CC/CFLAGS/LDFLAGS/--host/--with-pic, as libdvdread), and force the internal
+ build on ps5 (a re-run would reuse the found copy)
+
+---
+ cmake/modules/FindUdfread.cmake | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/cmake/modules/FindUdfread.cmake b/cmake/modules/FindUdfread.cmake
+index 5aadd91677..aa46e93ff8 100644
+--- a/cmake/modules/FindUdfread.cmake
++++ b/cmake/modules/FindUdfread.cmake
+@@ -39,13 +39,25 @@ if(NOT TARGET udfread::udfread)
+     # A corner case, but if a linux/freebsd user WANTS to build internal udfread, build anyway
+     if(NOT udfread_FOUND OR 
+        (udfread_VERSION VERSION_LESS ${${MODULE}_VER} AND ENABLE_INTERNAL_UDFREAD) OR
+-       ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd) AND ENABLE_INTERNAL_UDFREAD))
++       ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd OR CORE_SYSTEM_NAME STREQUAL ps5) AND ENABLE_INTERNAL_UDFREAD))
+ 
+       set(UDFREAD_VERSION ${${MODULE}_VER})
+       set(BUILD_NAME udfread_build)
+ 
++      # ps5: a cross build. Upstream passes no compiler here (on linux host and
++      # target are the same machine), so configure fell back to the host gcc
++      # and glibc headers: __errno_location / __fprintf_chk in the PS5 link.
++      # Same arguments as FindLibDvdRead; config.sub has no ps5 (see 0023).
++      if(CORE_SYSTEM_NAME STREQUAL ps5)
++        set(_udfread_cross --host=x86_64-unknown-freebsd
++                           --with-pic
++                           "CC=${CMAKE_C_COMPILER}"
++                           "CFLAGS=${CMAKE_C_FLAGS}"
++                           "LDFLAGS=${CMAKE_EXE_LINKER_FLAGS}")
++      endif()
+       set(CONFIGURE_COMMAND autoreconf -vif &&
+                             ./configure
++                            ${_udfread_cross}
+                             --enable-static
+                             --disable-shared
+                             --prefix=${DEPENDS_PATH})
+-- 
+2.43.0
+
