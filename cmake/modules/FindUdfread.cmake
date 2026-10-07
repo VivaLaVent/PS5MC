@@ -39,13 +39,25 @@ if(NOT TARGET udfread::udfread)
     # A corner case, but if a linux/freebsd user WANTS to build internal udfread, build anyway
     if(NOT udfread_FOUND OR 
        (udfread_VERSION VERSION_LESS ${${MODULE}_VER} AND ENABLE_INTERNAL_UDFREAD) OR
-       ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd) AND ENABLE_INTERNAL_UDFREAD))
+       ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd OR CORE_SYSTEM_NAME STREQUAL ps5) AND ENABLE_INTERNAL_UDFREAD))
 
       set(UDFREAD_VERSION ${${MODULE}_VER})
       set(BUILD_NAME udfread_build)
 
+      # ps5: a cross build. Upstream passes no compiler here (on linux host and
+      # target are the same machine), so configure fell back to the host gcc
+      # and glibc headers: __errno_location / __fprintf_chk in the PS5 link.
+      # Same arguments as FindLibDvdRead; config.sub has no ps5 (see 0023).
+      if(CORE_SYSTEM_NAME STREQUAL ps5)
+        set(_udfread_cross --host=x86_64-unknown-freebsd
+                           --with-pic
+                           "CC=${CMAKE_C_COMPILER}"
+                           "CFLAGS=${CMAKE_C_FLAGS}"
+                           "LDFLAGS=${CMAKE_EXE_LINKER_FLAGS}")
+      endif()
       set(CONFIGURE_COMMAND autoreconf -vif &&
                             ./configure
+                            ${_udfread_cross}
                             --enable-static
                             --disable-shared
                             --prefix=${DEPENDS_PATH})
