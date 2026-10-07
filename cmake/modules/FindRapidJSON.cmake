@@ -54,7 +54,7 @@ if(NOT TARGET RapidJSON::RapidJSON)
   # Check for existing RAPIDJSON. If version >= RAPIDJSON-VERSION file version, dont build
   # A corner case, but if a linux/freebsd user WANTS to build internal tinyxml2, build anyway
   if((RapidJSON_VERSION VERSION_LESS ${${MODULE}_VER} AND ENABLE_INTERNAL_RapidJSON) OR
-     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd) AND ENABLE_INTERNAL_RapidJSON))
+     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd OR CORE_SYSTEM_NAME STREQUAL ps5) AND ENABLE_INTERNAL_RapidJSON))
     # Build internal rapidjson
     buildrapidjson()
   else()
