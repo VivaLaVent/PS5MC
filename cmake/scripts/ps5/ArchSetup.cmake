@@ -74,6 +74,12 @@ unset(_dep)
 # Kodi 21's FindRapidJSON spells its switch in mixed case (and wants a CMake
 # config package, not pkg-config); internal build is the clean way on ps5.
 set(ENABLE_INTERNAL_RapidJSON ON CACHE BOOL "PS5: Kodi 21 only; build internally" FORCE)
+# Kodi 21 builds libudfread with autotools; force it internal there so a re-run
+# rebuilds the cross-compiled copy instead of reusing whatever it finds (0030).
+# Kodi 22 builds it with meson and a cross file, and is left as it is.
+if(PS5_KODI_MAJOR LESS 22)
+  set(ENABLE_INTERNAL_UDFREAD ON CACHE BOOL "PS5: Kodi 21 builds it internally" FORCE)
+endif()
 
 # Optional: the ps5-opengl native-app template routes malloc through an
 # app-owned heap (native-app/app_heap.c + linker wraps). Its default budget
