@@ -309,10 +309,34 @@ pic0="$SCE/pic0.dds"
 # pic0 is optional; when only a splash is provided, reuse it for both so the
 # "both or neither" rule is satisfied with one image.
 [ -f "$pic0" ] || pic0="$pic1"
-if [ -f "$pic1" ]; then
+# The template requires each pic to be exactly 3840x2160 BC7_UNORM DX10 2D with
+# no mip chain, and FAILS the whole build (no eboot) on anything else. Validate
+# here and skip a bad splash with a warning instead, so artwork never blocks a
+# release - the shell then shows its default background.
+dds_ok() {
+  python3 - "$1" <<'PY'
+import sys,struct
+try:
+    d=open(sys.argv[1],'rb').read(160)
+    assert d[:4]==b'DDS ', "not a DDS"
+    _,_,h,w,_,_,mips = struct.unpack('<7I', d[4:32])
+    pf_flags,fourcc = struct.unpack('<I4s', d[80:88])
+    assert (w,h)==(3840,2160), f"{w}x{h}, need 3840x2160"
+    assert mips in (0,1), f"mipMapCount {mips}, need no chain"
+    assert (pf_flags & 0x4) and fourcc==b'DX10', "no DX10 header"
+    dxgi,resdim,_,arr,_ = struct.unpack('<5I', d[128:148])
+    assert dxgi==98, f"dxgiFormat {dxgi}, need 98 (BC7_UNORM)"
+    assert resdim==3 and arr==1, "need 2D, arraySize 1"
+except Exception as e:
+    print(e); sys.exit(1)
+PY
+}
+if [ -f "$pic1" ] && reason=$(dds_ok "$pic1") && { [ ! -f "$pic0" ] || dds_ok "$pic0" >/dev/null; }; then
   cp "$pic1" "$APP/sce_sys/pic1.dds"
   cp "$pic0" "$APP/sce_sys/pic0.dds"
   echo "    backgrounds: $(basename "$pic1") (pic1) + $(basename "$pic0") (pic0)"
+elif [ -f "$pic1" ]; then
+  echo "    backgrounds: SKIPPED - $(basename "$pic1") is not a valid pic ($reason); shipping none"
 else
   echo "    backgrounds: none (add pic1-kodi${PS5MC_MAJOR}.dds or pic1.dds to title/sce_sys)"
 fi
