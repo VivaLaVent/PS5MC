@@ -58,6 +58,14 @@ if(NOT TARGET EGL::EGL)
   set_property(GLOBAL APPEND PROPERTY INTERNAL_DEPS_PROP EGL::EGL)
 endif()
 
+# Kodi 21 links every core library against GLOBAL_TARGET_DEPS =
+# INTERNAL_DEPS_PROP + PLATFORM_GLOBAL_TARGET_DEPS. It RESETS INTERNAL_DEPS_PROP
+# (CMakeLists.txt, after this platform file has run), so the registrations
+# above are wiped there and no library got HAS_GL=1 (GLuint unknown in every GL
+# file). PLATFORM_GLOBAL_TARGET_DEPS is platform-owned and never reset. Kodi 22
+# has neither the reset nor this variable, so this is a no-op there.
+list(APPEND PLATFORM_GLOBAL_TARGET_DEPS OpenGL::GL EGL::EGL)
+
 unset(_ps5_app_name_line)
 unset(_ps5_app_name)
 unset(_ps5_app_lc)
