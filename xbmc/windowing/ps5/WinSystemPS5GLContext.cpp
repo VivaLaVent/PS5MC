@@ -297,8 +297,12 @@ bool CWinSystemPS5GLContext::SetGuiCompositing(int colorTransfer)
 
 bool CWinSystemPS5GLContext::BeginGuiComposite(bool guiWillRender)
 {
+#if PS5_KODI_MAJOR >= 22
   return m_hdr.BeginGuiComposite(guiWillRender, m_nWidth, m_nHeight,
                                  GetEnabledFrontToBackRendering());
+#else // Kodi 21 has no front-to-back GUI rendering: no depth buffer
+  return m_hdr.BeginGuiComposite(guiWillRender, m_nWidth, m_nHeight, false);
+#endif
 }
 
 void CWinSystemPS5GLContext::EndGuiComposite()

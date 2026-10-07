@@ -1,0 +1,170 @@
+From 95c7ea362a1ab13fde77f4c9f0c84470c003c7c8 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Wed, 7 Oct 2026 13:36:01 +0000
+Subject: [PATCH] ps5(omega): upstream backports for FFmpeg 7.1 and PS5 HTTPS
+
+- DVDDemuxFFmpeg.cpp from upstream 72fe098c84 '[ffmpeg] Update to 7.1':
+  read_probe is private in FFmpeg 7, the spdif/dts probe is removed (Kodi 21
+  targets FFmpeg 6; the ps5 sysroot ships 7.1).
+- CurlFile.{h,cpp} from upstream af2dae5a49: CCurlFile::PreloadCaCertsBlob +
+  CURLOPT_CAINFO_BLOB (the ps5 platform hands curl its CA list as a memory blob).
+---
+ .../DVDDemuxers/DVDDemuxFFmpeg.cpp            | 71 +------------------
+ xbmc/filesystem/CurlFile.cpp                  | 24 +++++--
+ xbmc/filesystem/CurlFile.h                    |  3 +
+ 3 files changed, 25 insertions(+), 73 deletions(-)
+
+diff --git a/xbmc/cores/VideoPlayer/DVDDemuxers/DVDDemuxFFmpeg.cpp b/xbmc/cores/VideoPlayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
+index 1aebc3dcbc..174df53f16 100644
+--- a/xbmc/cores/VideoPlayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
++++ b/xbmc/cores/VideoPlayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
+@@ -376,74 +376,7 @@ bool CDVDDemuxFFmpeg::Open(const std::shared_ptr<CDVDInputStream>& pInput, bool
+     if (iformat == nullptr)
+     {
+       // let ffmpeg decide which demuxer we have to open
+-      bool trySPDIFonly = (m_pInput->GetContent() == "audio/x-spdif-compressed");
+-
+-      if (!trySPDIFonly)
+-        av_probe_input_buffer(m_ioContext, &iformat, strFile.c_str(), NULL, 0, 0);
+-
+-      // Use the more low-level code in case we have been built against an old
+-      // FFmpeg without the above av_probe_input_buffer(), or in case we only
+-      // want to probe for spdif (DTS or IEC 61937) compressed audio
+-      // specifically, or in case the file is a wav which may contain DTS or
+-      // IEC 61937 (e.g. ac3-in-wav) and we want to check for those formats.
+-      if (trySPDIFonly || (iformat && strcmp(iformat->name, "wav") == 0))
+-      {
+-        AVProbeData pd;
+-        int probeBufferSize = 32768;
+-        std::unique_ptr<uint8_t[]> probe_buffer (new uint8_t[probeBufferSize + AVPROBE_PADDING_SIZE]);
+-
+-        // init probe data
+-        pd.buf = probe_buffer.get();
+-        pd.filename = strFile.c_str();
+-
+-        // read data using avformat's buffers
+-        pd.buf_size = avio_read(m_ioContext, pd.buf, probeBufferSize);
+-        if (pd.buf_size <= 0)
+-        {
+-          CLog::Log(LOGERROR, "{} - error reading from input stream, {}", __FUNCTION__,
+-                    CURL::GetRedacted(strFile));
+-          return false;
+-        }
+-        memset(pd.buf + pd.buf_size, 0, AVPROBE_PADDING_SIZE);
+-
+-        // restore position again
+-        avio_seek(m_ioContext , 0, SEEK_SET);
+-
+-        // the advancedsetting is for allowing the user to force outputting the
+-        // 44.1 kHz DTS wav file as PCM, so that an A/V receiver can decode
+-        // it (this is temporary until we handle 44.1 kHz passthrough properly)
+-        if (trySPDIFonly || (iformat && strcmp(iformat->name, "wav") == 0 && !CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_VideoPlayerIgnoreDTSinWAV))
+-        {
+-          // check for spdif and dts
+-          // This is used with wav files and audio CDs that may contain
+-          // a DTS or AC3 track padded for S/PDIF playback. If neither of those
+-          // is present, we assume it is PCM audio.
+-          // AC3 is always wrapped in iec61937 (ffmpeg "spdif"), while DTS
+-          // may be just padded.
+-          const AVInputFormat* iformat2 = av_find_input_format("spdif");
+-          if (iformat2 && iformat2->read_probe(&pd) > AVPROBE_SCORE_MAX / 4)
+-          {
+-            iformat = iformat2;
+-          }
+-          else
+-          {
+-            // not spdif or no spdif demuxer, try dts
+-            iformat2 = av_find_input_format("dts");
+-
+-            if (iformat2 && iformat2->read_probe(&pd) > AVPROBE_SCORE_MAX / 4)
+-            {
+-              iformat = iformat2;
+-            }
+-            else if (trySPDIFonly)
+-            {
+-              // not dts either, return false in case we were explicitly
+-              // requested to only check for S/PDIF padded compressed audio
+-              CLog::Log(LOGDEBUG, "{} - not spdif or dts file, falling back", __FUNCTION__);
+-              return false;
+-            }
+-          }
+-        }
+-      }
++      av_probe_input_buffer(m_ioContext, &iformat, strFile.c_str(), NULL, 0, 0);
+ 
+       if (!iformat)
+       {
+@@ -1353,7 +1286,7 @@ bool CDVDDemuxFFmpeg::SeekTime(double time, bool backwards, double* startpts)
+ 
+     if (ret >= 0)
+     {
+-      if (m_pFormatContext->iformat->read_seek)
++      if (!(m_pFormatContext->iformat->flags & AVFMT_NOTIMESTAMPS))
+         m_seekToKeyFrame = true;
+       m_currentPts = DVD_NOPTS_VALUE;
+     }
+diff --git a/xbmc/filesystem/CurlFile.cpp b/xbmc/filesystem/CurlFile.cpp
+index 61a6377553..723b4fea15 100644
+--- a/xbmc/filesystem/CurlFile.cpp
++++ b/xbmc/filesystem/CurlFile.cpp
+@@ -49,6 +49,8 @@ long proxyType2CUrlProxyType[] = {
+     CURLPROXY_SOCKS5, CURLPROXY_SOCKS5_HOSTNAME, CURLPROXY_HTTPS,
+ };
+ 
++static std::vector<uint8_t> cachedCaCertsBlob; // cached CA certs file
++
+ #define FILLBUFFER_OK         0
+ #define FILLBUFFER_NO_DATA    1
+ #define FILLBUFFER_FAIL       2
+@@ -682,12 +684,15 @@ void CCurlFile::SetCommonOptions(CReadState* state, bool failOnError /* = true *
+   // set CA bundle file
+   std::string caCert = CSpecialProtocol::TranslatePath(
+       CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_caTrustFile);
+-#ifdef TARGET_WINDOWS_STORE
+-  // UWP Curl - Setting CURLOPT_CAINFO with a valid cacert file path is required for UWP
+-  g_curlInterface.easy_setopt(h, CURLOPT_CAINFO, "system\\certs\\cacert.pem");
+-#endif
+   if (!caCert.empty() && XFILE::CFile::Exists(caCert))
+     g_curlInterface.easy_setopt(h, CURLOPT_CAINFO, caCert.c_str());
++
++  // From OpenSSL 3.0 CURLOPT_CAINFO not works (on UWP), use CURLOPT_CAINFO_BLOB instead
++  if (!cachedCaCertsBlob.empty())
++  {
++    curl_blob blob{cachedCaCertsBlob.data(), cachedCaCertsBlob.size(), CURL_BLOB_NOCOPY};
++    g_curlInterface.easy_setopt(h, CURLOPT_CAINFO_BLOB, &blob);
++  }
+ }
+ 
+ void CCurlFile::SetRequestHeaders(CReadState* state)
+@@ -2175,3 +2180,14 @@ double CCurlFile::GetDownloadSpeed()
+ #endif
+   return 0.0;
+ }
++
++void CCurlFile::PreloadCaCertsBlob()
++{
++  XFILE::CFile file;
++
++  if (file.LoadFile(CSpecialProtocol::TranslatePath("special://xbmc/system/certs/cacert.pem"),
++                    cachedCaCertsBlob) <= 0)
++  {
++    CLog::LogF(LOGERROR, "failed to load 'system/certs/cacert.pem'");
++  }
++}
+diff --git a/xbmc/filesystem/CurlFile.h b/xbmc/filesystem/CurlFile.h
+index 88f29232d6..408e00416f 100644
+--- a/xbmc/filesystem/CurlFile.h
++++ b/xbmc/filesystem/CurlFile.h
+@@ -91,6 +91,9 @@ namespace XFILE
+       /* static function that will get cookies stored by CURL in RFC 2109 format */
+       static bool GetCookies(const CURL &url, std::string &cookies);
+ 
++      /* load CA certs file into memory for later use */
++      static void PreloadCaCertsBlob();
++
+       class CReadState
+       {
+       public:
+-- 
+2.43.0
+

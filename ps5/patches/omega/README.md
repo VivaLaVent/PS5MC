@@ -14,6 +14,7 @@ apply unchanged; these 8 are the Omega forms, exported from the verified
 
 `tools/migrate-to-fork.sh` prefers a file here over `kodi/` when building `ps5-omega`.
 | 0020 cdio | Kodi 21 requires Cdio unconditionally (22 only with `ENABLE_OPTICAL`); moved under that guard |
+| 0029 upstream backports | `DVDDemuxFFmpeg.cpp` from upstream `72fe098c84` "[ffmpeg] Update to 7.1" (`read_probe` is private in FFmpeg 7; 21 targets FFmpeg 6, the sysroot ships 7.1); `CurlFile` CA-blob (`PreloadCaCertsBlob` + `CURLOPT_CAINFO_BLOB`) from upstream `af2dae5a49` - how HTTPS works on the PS5 |
 | 0028 22-compat | headers at their Kodi 22 paths (`jobs/Job.h`, `jobs/JobManager.h`, `FileItemList.h`) forwarding to the 21 locations; `CGuiCompositeShaderGL` + `gl_gui_composite` shaders backported verbatim from 22 (HDR GUI compositing) |
 | 0027 optical off | 21 includes CDDA/cddb headers unconditionally in FileFactory, DirectoryFactory, MusicDatabase and builds the CDDA tag loader always; guarded as Kodi 22 does |
 | 0026 force internal | TagLib/PCRE/RapidJSON had the same linux/freebsd-only force clause: a re-run found the previous run's internal copy by version, took the system path, and its re-rooted find_library failed. ps5 added |
@@ -32,3 +33,4 @@ API renames that cannot be shimmed (they are in `override` signatures) are
 guarded in the shared platform sources with `PS5_KODI_MAJOR`, which
 `ArchSetup.cmake` reads from the tree's `version.txt`:
 `CacheType`/`DIR_CACHE_TYPE` (SMB2Directory.h), `IOControl`/`EIoControl` (SMB2File.h).
+`SetFolder`/`m_bIsFolder` (SMB2Directory.cpp), `SourceType::LOCAL`/`CMediaSource::SOURCE_TYPE_LOCAL` (PS5StorageProvider.cpp), front-to-back GUI rendering + FBO depth buffer (22-only; HdrOutputPS5.cpp, WinSystemPS5GLContext.cpp).
