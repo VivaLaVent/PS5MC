@@ -56,6 +56,13 @@ Error ClassifyErrno(int err, const std::string& message)
       message.find("socket") != std::string::npos ||
       message.find("Socket") != std::string::npos)
     return Error::Network;
+  // The server locked the account after too many bad logins. Re-prompting and
+  // retrying only adds more failed logins and deepens the lockout, so this is
+  // its own category: surface it, do not retry, do not ask for the password
+  // again (it is almost certainly correct - the account is simply locked).
+  if (message.find("ACCOUNT_LOCKED_OUT") != std::string::npos ||
+      message.find("ACCOUNT_LOCKED") != std::string::npos)
+    return Error::LockedOut;
   // libsmb2 reports a failed logon as ECONNREFUSED - look at the NT status.
   if (message.find("LOGON_FAILURE") != std::string::npos ||
       message.find("ACCESS_DENIED") != std::string::npos ||

@@ -138,6 +138,15 @@ bool CSMB2Directory::GetDirectory(const CURL& urlIn, CFileItemList& items)
   if (!r)
   {
     CLog::Log(LOGERROR, "CSMB2Directory: {}: {}", urlIn.GetRedacted(), r.message);
+    if (r.error == SMB2::Error::LockedOut)
+    {
+      CLog::Log(LOGERROR,
+                "CSMB2Directory: {} is locked out on the server (too many failed logins). "
+                "The password is not re-requested; unlock the account on the server or wait for "
+                "the lockout to expire.",
+                CURL(urlIn).GetHostName());
+      return false; // do not RequireAuthentication - that would retry and relock
+    }
     if (r.error == SMB2::Error::AccessDenied)
     {
       SMB2::Pool::Get().Forget(target);
