@@ -296,7 +296,11 @@ bool CHdrOutputPS5::BeginGuiComposite(bool guiWillRender, int width, int height,
     m_guiFbo.Cleanup();
     if (!m_guiFbo.Initialize() ||
         !m_guiFbo.CreateAndBindToTexture(GL_TEXTURE_2D, width, height, GL_RGBA) ||
+#if PS5_KODI_MAJOR >= 22
         (depth && !m_guiFbo.AttachDepthBuffer(width, height)))
+#else // Kodi 21: no front-to-back GUI rendering, so depth is never requested
+        depth)
+#endif
     {
       CLog::Log(LOGERROR, "CHdrOutputPS5: failed to create the GUI FBO {}x{}", width, height);
       m_guiFbo.Cleanup();

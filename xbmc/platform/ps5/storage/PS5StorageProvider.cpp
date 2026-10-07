@@ -34,7 +34,11 @@ void Add(std::vector<CMediaSource>& drives, const char* path, const char* name)
   CMediaSource share;
   share.strPath = path;
   share.strName = name;
+#if PS5_KODI_MAJOR >= 22
   share.m_iDriveType = SourceType::LOCAL;
+#else // Kodi 21: nested plain enum
+  share.m_iDriveType = CMediaSource::SOURCE_TYPE_LOCAL;
+#endif
   drives.push_back(share);
 }
 } // namespace

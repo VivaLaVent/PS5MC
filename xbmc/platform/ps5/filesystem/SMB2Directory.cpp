@@ -25,6 +25,19 @@ using namespace XFILE;
 
 namespace
 {
+// Kodi 22 added CGUIListItem::SetFolder(); on Kodi 21 the flag is the public m_bIsFolder.
+inline void SetIsFolder(CFileItem& item, bool folder)
+{
+#if PS5_KODI_MAJOR >= 22
+  item.SetFolder(folder);
+#else
+  item.m_bIsFolder = folder;
+#endif
+}
+} // namespace
+
+namespace
+{
 KODI::TIME::FileTime ToLocalFileTime(int64_t mtime, int64_t ctime)
 {
   const int64_t t = mtime ? mtime : ctime;
@@ -62,7 +75,7 @@ bool CSMB2Directory::GetDirectory(const CURL& urlIn, CFileItemList& items)
     {
       auto item = std::make_shared<CFileItem>(share);
       item->SetPath(base + share + "/");
-      item->SetFolder(true);
+      SetIsFolder(*item, true);
       fileItems.push_back(std::move(item));
     }
   }
@@ -77,7 +90,7 @@ bool CSMB2Directory::GetDirectory(const CURL& urlIn, CFileItemList& items)
       if (e.stat.isDirectory)
         URIUtils::AddSlashAtEnd(path);
       item->SetPath(path);
-      item->SetFolder(e.stat.isDirectory);
+      SetIsFolder(*item, e.stat.isDirectory);
       item->SetSize(static_cast<int64_t>(e.stat.size));
       item->SetDateTime(ToLocalFileTime(e.stat.mtime, e.stat.ctime));
       item->SetProperty(DIR_PROPERTY_STAT_MTIME, e.stat.mtime);

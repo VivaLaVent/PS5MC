@@ -14,6 +14,7 @@
 #include "HdrOutputPS5.h"
 #include "utils/HDRCapabilities.h"
 #include "WinSystemPS5.h"
+#include "guilib/DirtyRegion.h" // CDirtyRegionList (Kodi 21 does not reach it transitively)
 #include "rendering/gl/RenderSystemGL.h"
 #include "utils/EGLUtils.h"
 #include "windowing/linux/WinSystemEGL.h"
