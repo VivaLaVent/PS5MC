@@ -95,8 +95,18 @@ bool CTextureBundleXBT::OpenBundle()
   // Load the texture file
   if (!XFILE::CXbtManager::GetInstance().GetReader(CURL(m_path), m_XBTFReader))
   {
+    // Logged once per bundle: HasFile() retries OpenBundle() for every texture
+    // lookup, and a silent failure here means every bundled skin texture
+    // (icons, highlights, splash) turns into "could not find texture" with no
+    // hint why. (On the PS5 this once hid a corrupted bundle path.)
+    if (!m_openFailureLogged)
+    {
+      m_openFailureLogged = true;
+      CLog::Log(LOGERROR, "{} - cannot open texture bundle '{}'", __FUNCTION__, m_path);
+    }
     return false;
   }
+  m_openFailureLogged = false;
 
   CLog::Log(LOGDEBUG, "{} - Opened bundle {}", __FUNCTION__, m_path);
 
@@ -104,6 +114,7 @@ bool CTextureBundleXBT::OpenBundle()
 
   if (lzo_init() != LZO_E_OK)
   {
+    CLog::Log(LOGERROR, "{} - lzo_init() failed; bundle '{}' unusable", __FUNCTION__, m_path);
     return false;
   }
 
