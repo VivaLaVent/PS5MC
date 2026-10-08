@@ -1,0 +1,60 @@
+From db731bb4cdbf883d1932965282097caa09523b74 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Thu, 8 Oct 2026 11:20:28 +0000
+Subject: [PATCH] ps5(omega): TextureGL diagnostic - log
+ xbfmt/glfmt/compressed/swizzle/glerror per upload (kodi-debug), to find why
+ icons/highlights are blank while backgrounds render
+
+---
+ xbmc/guilib/TextureGL.cpp | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/xbmc/guilib/TextureGL.cpp b/xbmc/guilib/TextureGL.cpp
+index b6ba9d5fdc..cc11f83ed7 100644
+--- a/xbmc/guilib/TextureGL.cpp
++++ b/xbmc/guilib/TextureGL.cpp
+@@ -8,6 +8,9 @@
+ 
+ #include "TextureGL.h"
+ 
++#include <cstdio>
++#include <cstdlib>
++
+ #include "ServiceBroker.h"
+ #include "guilib/TextureManager.h"
+ #include "rendering/RenderSystem.h"
+@@ -152,6 +155,11 @@ void CGLTexture::LoadToGPU()
+     break;
+   }
+ 
++#if defined(TARGET_PS5)
++  extern "C" int sceKernelDebugOutText(int, const char*);
++  const bool _ps5dbg = std::getenv("KODI_PS5_DEBUG") != nullptr;
++  if (_ps5dbg) while (glGetError() != GL_NO_ERROR) {} // clear prior error
++#endif
+   if ((m_format & XB_FMT_DXT_MASK) == 0)
+   {
+     glTexImage2D(GL_TEXTURE_2D, 0, numcomponents,
+@@ -172,6 +180,19 @@ void CGLTexture::LoadToGPU()
+                            m_textureWidth, m_textureHeight, 0,
+                            GetPitch() * GetRows(), m_pixels);
+   }
++#if defined(TARGET_PS5)
++  if (_ps5dbg)
++  {
++    const GLenum _e = glGetError();
++    char _b[176];
++    std::snprintf(_b, sizeof _b,
++                  "[ps5tex] %ux%u xbfmt=%#x glfmt=%#x compressed=%d swizzle=%d glerror=%#x\n",
++                  m_textureWidth, m_textureHeight, static_cast<unsigned>(m_format),
++                  static_cast<unsigned>(format), (m_format & XB_FMT_DXT_MASK) ? 1 : 0,
++                  ps5SwizzleBgra ? 1 : 0, static_cast<unsigned>(_e));
++    sceKernelDebugOutText(0, _b);
++  }
++#endif
+ 
+   if (IsMipmapped() && m_isOglVersion3orNewer)
+   {
+-- 
+2.43.0
+
