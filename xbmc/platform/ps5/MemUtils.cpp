@@ -13,8 +13,10 @@
 #include <cstdlib>
 #include <stdexcept>
 
-#include <sys/sysctl.h>
+// Order matters: FreeBSD's <sys/sysctl.h> uses u_int from <sys/types.h>
+// without including it.
 #include <sys/types.h>
+#include <sys/sysctl.h>
 
 // Kodi's allocations live in one direct-memory heap managed by the ps5-opengl
 // template's app_heap.c, which counts its live bytes. scripts/30-deploy.sh

@@ -60,7 +60,11 @@ for v in "${VARIANTS[@]}"; do
   # one run (for porting rounds; the artifact checks below still gate success).
   KODI_SRC="$FORK" bash "$SCRIPTS/lib/write-build-stamp.sh"
   cmake --build "$bdir" -j"$(nproc)" ${KEEP_GOING:+-- -k 0} > "$OUT/$name-build.log" 2>&1 \
-    || { echo "!! $name: build failed:"; grep -nE 'error:|FAILED' "$OUT/$name-build.log" | head; exit 1; }
+    || { echo "!! $name: build failed (full log: $OUT/$name-build.log):"
+         # '!!'-prefixed so the cause survives a filter on the output; the failed
+         # target and the compiler's own messages, with source paths shortened
+         grep -E '^FAILED| error: ' "$OUT/$name-build.log" | head -15 | sed -E "s|$FORK/||g" | cut -c1-240 | sed 's/^/!!   /'
+         exit 1; }
   # contentVersion for the store: 01.000.0NN from the numeric release version
   # (1.2 -> 01.000.012, 1.11 -> 01.000.011... keep tags <= x.99). Rises per tag.
   CVER=$(printf '01.000.0%02d' "$(printf '%s' "$VER" | awk -F. '{printf (($1*10)+$2)%100}')")
