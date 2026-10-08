@@ -398,9 +398,8 @@ cp -a "$STAGE/app0/share/kodi" "$DIST/share/"
 du -sh "$DIST" | awk '{print "    title folder size: "$1}'
 
 if [ -n "${PS5_HOST:-}" ]; then
-  echo "==> uploading to ftp://$PS5_HOST:${PS5_FTP_PORT:-2121}/data/homebrew/$TITLE_ID"
-  command -v lftp >/dev/null || { echo "   (install lftp, or copy the folder manually)"; }
-  lftp -e "mirror -R --delete '$DIST' '/data/homebrew/$TITLE_ID'; quit" -p "${PS5_FTP_PORT:-2121}" "$PS5_HOST"
+  . "$HERE/scripts/lib/deploy-to-console.sh"
+  deploy_to_console "$DIST" "$TITLE_ID" || echo "!! deploy/verify failed - do NOT trust this install"
 fi
 echo
 echo "Title folder: $DIST"
