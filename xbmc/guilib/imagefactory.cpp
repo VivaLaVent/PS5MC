@@ -55,10 +55,11 @@ IImage* ImageFactory::CreateLoaderFromMimeType(const std::string& strMimeType)
     }
     return result.release();
   }
-#endif // !TARGET_PS5 : binary imagedecoder add-ons cannot load on the in-process
-       // ELF loader yet, and a failed CImageDecoder would yield a blank texture
-       // (black background/logo on Kodi 21, which bundles one). FFmpeg decodes
-       // PNG/JPEG/GIF here, so use it directly.
+#endif // !TARGET_PS5 : binary image-decoder add-ons are skipped on the PS5 while
+       // the in-process binary add-on loader is unfinished (loading a binary
+       // add-on can still fault there), so installing one cannot break every
+       // image. FFmpeg decodes PNG/JPEG/GIF/WebP. Revisit once binary add-ons
+       // load (it would also enable decoders such as HEIF/RAW).
 
   return new CFFmpegImage(strMimeType);
 }
