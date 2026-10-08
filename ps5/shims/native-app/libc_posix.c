@@ -1004,11 +1004,19 @@ static int fopen_mode_to_flags(const char* mode)
   return flags;
 }
 
+static int g_fopen_logged = 0;
 FILE* __wrap_fopen(const char* restrict path, const char* restrict mode)
 {
   FILE* f = __real_fopen(path, mode);
   if (f || !path)
     return f;
+  if (!g_fopen_logged)
+  {
+    g_fopen_logged = 1;
+    char b[256];
+    snprintf(b, sizeof b, "[ps5fopen] __wrap_fopen reached, real fopen failed: %s\n", path);
+    sceKernelDebugOutText(0, b);
+  }
   /* The clean-room libc.prx's fopen() cannot open files on the title's mounted
    * image (/app0) - the same sandbox limitation that made opendir() fail and
    * forced the getdents-based DIR here. Our open()/read() DO work on /app0
@@ -1025,28 +1033,13 @@ FILE* __wrap_fopen(const char* restrict path, const char* restrict mode)
       FILE* viaFd = fdopen(fd, mode);
       if (viaFd)
       {
-        if (getenv("KODI_PS5_DEBUG"))
-        {
-          char b[256];
-          snprintf(b, sizeof b, "[ps5fopen] fallback OK: %s\n", path);
-          sceKernelDebugOutText(0, b);
-        }
+        { char b[256]; snprintf(b, sizeof b, "[ps5fopen] fallback OK: %s\n", path); sceKernelDebugOutText(0, b); }
         return viaFd;
       }
-      if (getenv("KODI_PS5_DEBUG"))
-      {
-        char b[256];
-        snprintf(b, sizeof b, "[ps5fopen] open() ok but fdopen() FAILED: %s (errno %d)\n", path, errno);
-        sceKernelDebugOutText(0, b);
-      }
+      { char b[256]; snprintf(b, sizeof b, "[ps5fopen] open ok, fdopen FAILED: %s (errno %d)\n", path, errno); sceKernelDebugOutText(0, b); }
       close(fd);
     }
-    else if (getenv("KODI_PS5_DEBUG"))
-    {
-      char b[256];
-      snprintf(b, sizeof b, "[ps5fopen] fallback open() FAILED: %s (errno %d)\n", path, errno);
-      sceKernelDebugOutText(0, b);
-    }
+    else { char b[256]; snprintf(b, sizeof b, "[ps5fopen] fallback open FAILED: %s (errno %d)\n", path, errno); sceKernelDebugOutText(0, b); }
   }
   /* Still failed: set a POSIX errno Python's path probe tolerates (see above). */
   struct stat st;
