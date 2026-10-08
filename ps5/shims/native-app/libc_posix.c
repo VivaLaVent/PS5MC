@@ -977,8 +977,10 @@ char* realpath(const char* restrict path, char* restrict resolved)
  * from stat() (a real libkernel syscall): missing -> ENOENT, directory ->
  * EISDIR, present-but-unopenable -> EACCES. Success is untouched.
  */
+extern int sceKernelDebugOutText(int, const char*);
 #include <stdio.h>
 FILE* __real_fopen(const char* restrict path, const char* restrict mode);
+FILE* __real_fopen64(const char* restrict path, const char* restrict mode);
 
 /* Translate an fopen mode string to open(2) flags for the raw-open fallback.
  * Covers the modes Kodi/Python actually use: r, rb, w, wb, a, ab, and '+'. */
@@ -1022,8 +1024,28 @@ FILE* __wrap_fopen(const char* restrict path, const char* restrict mode)
     {
       FILE* viaFd = fdopen(fd, mode);
       if (viaFd)
+      {
+        if (getenv("KODI_PS5_DEBUG"))
+        {
+          char b[256];
+          snprintf(b, sizeof b, "[ps5fopen] fallback OK: %s\n", path);
+          sceKernelDebugOutText(0, b);
+        }
         return viaFd;
+      }
+      if (getenv("KODI_PS5_DEBUG"))
+      {
+        char b[256];
+        snprintf(b, sizeof b, "[ps5fopen] open() ok but fdopen() FAILED: %s (errno %d)\n", path, errno);
+        sceKernelDebugOutText(0, b);
+      }
       close(fd);
+    }
+    else if (getenv("KODI_PS5_DEBUG"))
+    {
+      char b[256];
+      snprintf(b, sizeof b, "[ps5fopen] fallback open() FAILED: %s (errno %d)\n", path, errno);
+      sceKernelDebugOutText(0, b);
     }
   }
   /* Still failed: set a POSIX errno Python's path probe tolerates (see above). */
@@ -1035,4 +1057,12 @@ FILE* __wrap_fopen(const char* restrict path, const char* restrict mode)
   else
     errno = EACCES;
   return NULL;
+}
+
+/* With -D_FILE_OFFSET_BITS=64, Kodi's fopen() calls compile to fopen64(), so the
+ * --wrap=fopen above never fires for them (this is why Textures.xbt still would
+ * not open). Wrap fopen64 too, sharing the same /app0 raw-open fallback. */
+FILE* __wrap_fopen64(const char* restrict path, const char* restrict mode)
+{
+  return __wrap_fopen(path, mode);
 }
