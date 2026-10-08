@@ -114,6 +114,16 @@ void CGLTexture::LoadToGPU()
   GLenum format = GL_BGRA;
   GLint numcomponents = GL_RGBA;
 
+#if defined(TARGET_PS5)
+  // The ps5-opengl driver advertises GL_EXT_abgr and GL_ARB_texture_swizzle but
+  // NOT GL_EXT_bgra, so GL_BGRA is not a valid glTexImage2D source format: skin
+  // images (BGRA pixels) uploaded as GL_BGRA come out black, while text (a
+  // single-channel path) is fine. Upload the same bytes as GL_RGBA and swap
+  // B<->R with a texture swizzle at sample time (free, no CPU copy). Kodi 22's
+  // rewritten texture path avoids this; this is the Kodi-21 path only.
+  bool ps5SwizzleBgra = false;
+#endif
+
   switch (m_format)
   {
   case XB_FMT_DXT1:
@@ -132,6 +142,13 @@ void CGLTexture::LoadToGPU()
     break;
   case XB_FMT_A8R8G8B8:
   default:
+#if defined(TARGET_PS5)
+    if (format == GL_BGRA)
+    {
+      format = GL_RGBA;      // driver has no GL_BGRA upload; send RGBA bytes
+      ps5SwizzleBgra = true; // and swizzle B<->R when sampling
+    }
+#endif
     break;
   }
 
@@ -140,6 +157,14 @@ void CGLTexture::LoadToGPU()
     glTexImage2D(GL_TEXTURE_2D, 0, numcomponents,
                  m_textureWidth, m_textureHeight, 0,
                  format, GL_UNSIGNED_BYTE, m_pixels);
+#if defined(TARGET_PS5)
+    if (ps5SwizzleBgra)
+    {
+      // sample order BGRA from RGBA-stored bytes: R<-B, G<-G, B<-R, A<-A
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_BLUE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+    }
+#endif
   }
   else
   {
