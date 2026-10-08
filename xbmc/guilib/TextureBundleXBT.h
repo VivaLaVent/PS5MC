@@ -69,6 +69,8 @@ private:
 
   time_t m_TimeStamp;
 
+  bool m_openFailureLogged = false;
+
   bool m_themeBundle;
   std::string m_path;
   std::shared_ptr<CXBTFReader> m_XBTFReader;
