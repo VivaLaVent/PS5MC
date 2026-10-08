@@ -1,0 +1,38 @@
+From ed58eb955d7f9c0255bbb10f083fc44b35fe9390 Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Thu, 8 Oct 2026 13:26:06 +0000
+Subject: [PATCH] ps5: TranslatePathConvertCase returns the path as-is (no
+ case-fold walk) - the walk's per-component stat/opendir misbehaves in the
+ title sandbox and corrupted correct paths (skin bundle ->
+ /media/Textures.xbt), breaking all skin textures
+
+---
+ xbmc/filesystem/SpecialProtocol.cpp | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/xbmc/filesystem/SpecialProtocol.cpp b/xbmc/filesystem/SpecialProtocol.cpp
+index 189ddfa5dc..10d50e9f9c 100644
+--- a/xbmc/filesystem/SpecialProtocol.cpp
++++ b/xbmc/filesystem/SpecialProtocol.cpp
+@@ -209,6 +209,18 @@ std::string CSpecialProtocol::TranslatePathConvertCase(const std::string& path)
+ {
+   std::string translatedPath = TranslatePath(path);
+ 
++#if defined(TARGET_PS5)
++  // On the PS5 every path is already correct-case (the title image /app0 and the
++  // /data home are stored with the exact names Kodi uses), so no case conversion
++  // is needed. The POSIX walk below statted and opendir()'d each path component
++  // to case-fold it; in the title sandbox those calls do not behave as it
++  // assumes and it CORRUPTED a correct path - e.g. the skin bundle
++  // /app0/share/kodi/addons/skin.estuary/media/Textures.xbt collapsed to
++  // /media/Textures.xbt, so every bundled texture (icons, highlights, splash)
++  // failed to load. Return the straight translation.
++  return translatedPath;
++#endif
++
+ #ifdef TARGET_POSIX
+   if (translatedPath.find("://") != std::string::npos)
+     return translatedPath;
+-- 
+2.43.0
+

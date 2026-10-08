@@ -1010,7 +1010,7 @@ FILE* __wrap_fopen(const char* restrict path, const char* restrict mode)
   FILE* f = __real_fopen(path, mode);
   if (f || !path)
     return f;
-  if (!g_fopen_logged)
+  if (!g_fopen_logged && getenv("KODI_PS5_DEBUG"))
   {
     g_fopen_logged = 1;
     char b[256];
@@ -1033,13 +1033,11 @@ FILE* __wrap_fopen(const char* restrict path, const char* restrict mode)
       FILE* viaFd = fdopen(fd, mode);
       if (viaFd)
       {
-        { char b[256]; snprintf(b, sizeof b, "[ps5fopen] fallback OK: %s\n", path); sceKernelDebugOutText(0, b); }
         return viaFd;
       }
-      { char b[256]; snprintf(b, sizeof b, "[ps5fopen] open ok, fdopen FAILED: %s (errno %d)\n", path, errno); sceKernelDebugOutText(0, b); }
       close(fd);
     }
-    else { char b[256]; snprintf(b, sizeof b, "[ps5fopen] fallback open FAILED: %s (errno %d)\n", path, errno); sceKernelDebugOutText(0, b); }
+
   }
   /* Still failed: set a POSIX errno Python's path probe tolerates (see above). */
   struct stat st;
