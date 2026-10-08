@@ -199,7 +199,7 @@ MAIN_O="$BUILD/CMakeFiles/kodi.dir/xbmc/platform/ps5/main.cpp.o"
 { echo "$MAIN_O"; cat "$APP/vendor/kodi-whole.txt"; } > "$APP/vendor/kodi-whole.rsp"
 LINK_SCRIPT="$APP/tools/build.sh"
 [ "$(grep -c -- '--wrap=malloc_usable_size \\$' "$LINK_SCRIPT")" = 1 ] || { echo "!! unexpected link line in $LINK_SCRIPT"; exit 1; }
-sed -i "/--wrap=malloc_usable_size \\\\$/a\\    --error-limit=0 --wrap=pthread_create --wrap=pipe --wrap=fcntl --wrap=chdir --wrap=write --wrap=fopen --wrap=fopen64 --whole-archive @$APP/vendor/kodi-whole.rsp --no-whole-archive \\\\" "$LINK_SCRIPT"
+sed -i "/--wrap=malloc_usable_size \\\\$/a\\    --error-limit=0 --wrap=pthread_create --wrap=pipe --wrap=fcntl --wrap=chdir --wrap=write --wrap=fopen --whole-archive @$APP/vendor/kodi-whole.rsp --no-whole-archive \\\\" "$LINK_SCRIPT"
 grep -q "kodi-whole.rsp" "$LINK_SCRIPT" || { echo "!! failed to inject the whole-archive list"; exit 1; }
 
 # External libraries as a linker GROUP (circular deps resolve inside a group),
@@ -396,6 +396,30 @@ echo "==> 6. Kodi data into the title folder"
 mkdir -p "$DIST/share"
 cp -a "$STAGE/app0/share/kodi" "$DIST/share/"
 du -sh "$DIST" | awk '{print "    title folder size: "$1}'
+
+# Every skin texture bundle must be in a format THIS Kodi reads. Kodi 22 writes
+# XBTF version 3, Kodi 21 reads only 2; a bundle from the wrong TexturePacker
+# opens, is rejected, and leaves the whole skin without icons, buttons and
+# highlights while everything else looks fine. The readable range comes from
+# the tree's own XBTF.h (XBTF_VERSION, and XBTF_VERSION_MIN where defined).
+XBTF_H="$KODI_SRC/xbmc/guilib/XBTF.h"
+if [ -f "$XBTF_H" ]; then
+  xbtf_max="$(sed -n 's/.*XBTF_VERSION = "\([0-9]\)".*/\1/p' "$XBTF_H" | head -1)"
+  xbtf_min="$(sed -n "s/.*XBTF_VERSION_MIN = '\([0-9]\)'.*/\1/p" "$XBTF_H" | head -1)"
+  xbtf_min="${xbtf_min:-$xbtf_max}"
+  xbt_bad=0 xbt_n=0
+  while IFS= read -r -d '' xbt; do
+    xbt_n=$((xbt_n + 1))
+    hdr="$(head -c 5 "$xbt")"
+    v="${hdr:4:1}"
+    if [ "${hdr:0:4}" != XBTF ] || [ -z "$v" ] || [ "$v" \< "$xbtf_min" ] || [ "$v" \> "$xbtf_max" ]; then
+      echo "!! ${xbt#"$DIST"/} is XBTF version '${v:-?}'; this Kodi reads $xbtf_min..$xbtf_max"
+      xbt_bad=1
+    fi
+  done < <(find "$DIST" -name '*.xbt' -print0)
+  [ "$xbt_bad" = 0 ] || { echo "!! texture bundles packed by the wrong TexturePacker (host tools: see 20-configure-kodi.sh)"; exit 1; }
+  echo "    texture bundles: $xbt_n, XBTF version $xbtf_min..$xbtf_max ok"
+fi
 
 if [ -n "${PS5_HOST:-}" ]; then
   . "$HERE/scripts/lib/deploy-to-console.sh"

@@ -977,69 +977,13 @@ char* realpath(const char* restrict path, char* restrict resolved)
  * from stat() (a real libkernel syscall): missing -> ENOENT, directory ->
  * EISDIR, present-but-unopenable -> EACCES. Success is untouched.
  */
-extern int sceKernelDebugOutText(int, const char*);
 #include <stdio.h>
 FILE* __real_fopen(const char* restrict path, const char* restrict mode);
-FILE* __real_fopen64(const char* restrict path, const char* restrict mode);
-
-/* Translate an fopen mode string to open(2) flags for the raw-open fallback.
- * Covers the modes Kodi/Python actually use: r, rb, w, wb, a, ab, and '+'. */
-static int fopen_mode_to_flags(const char* mode)
-{
-  if (!mode || !*mode)
-    return -1;
-  int flags;
-  switch (mode[0])
-  {
-    case 'r': flags = O_RDONLY; break;
-    case 'w': flags = O_WRONLY | O_CREAT | O_TRUNC; break;
-    case 'a': flags = O_WRONLY | O_CREAT | O_APPEND; break;
-    default: return -1;
-  }
-  for (const char* p = mode + 1; *p; ++p)
-    if (*p == '+')
-      flags = (flags & ~(O_RDONLY | O_WRONLY)) | O_RDWR;
-  /* 'b' and other stdio-only flags (e.g. 'e', 'x') are ignored here; O_CLOEXEC
-   * and O_EXCL are not needed for the files this fallback handles. */
-  return flags;
-}
-
-static int g_fopen_logged = 0;
 FILE* __wrap_fopen(const char* restrict path, const char* restrict mode)
 {
   FILE* f = __real_fopen(path, mode);
   if (f || !path)
     return f;
-  if (!g_fopen_logged && getenv("KODI_PS5_DEBUG"))
-  {
-    g_fopen_logged = 1;
-    char b[256];
-    snprintf(b, sizeof b, "[ps5fopen] __wrap_fopen reached, real fopen failed: %s\n", path);
-    sceKernelDebugOutText(0, b);
-  }
-  /* The clean-room libc.prx's fopen() cannot open files on the title's mounted
-   * image (/app0) - the same sandbox limitation that made opendir() fail and
-   * forced the getdents-based DIR here. Our open()/read() DO work on /app0
-   * (the skin XML, fonts and add-ons all load through them), so when the real
-   * fopen fails, retry with raw open(2) and wrap the descriptor with fdopen().
-   * This is what makes CXBTFReader read skin.estuary/media/Textures.xbt, whose
-   * failure left the whole UI without icons. */
-  const int flags = fopen_mode_to_flags(mode);
-  if (flags >= 0)
-  {
-    const int fd = open(path, flags, 0666);
-    if (fd >= 0)
-    {
-      FILE* viaFd = fdopen(fd, mode);
-      if (viaFd)
-      {
-        return viaFd;
-      }
-      close(fd);
-    }
-
-  }
-  /* Still failed: set a POSIX errno Python's path probe tolerates (see above). */
   struct stat st;
   if (stat(path, &st) != 0)
     errno = (errno == ENOTDIR || errno == ENAMETOOLONG) ? errno : ENOENT;
@@ -1048,12 +992,4 @@ FILE* __wrap_fopen(const char* restrict path, const char* restrict mode)
   else
     errno = EACCES;
   return NULL;
-}
-
-/* With -D_FILE_OFFSET_BITS=64, Kodi's fopen() calls compile to fopen64(), so the
- * --wrap=fopen above never fires for them (this is why Textures.xbt still would
- * not open). Wrap fopen64 too, sharing the same /app0 raw-open fallback. */
-FILE* __wrap_fopen64(const char* restrict path, const char* restrict mode)
-{
-  return __wrap_fopen(path, mode);
 }

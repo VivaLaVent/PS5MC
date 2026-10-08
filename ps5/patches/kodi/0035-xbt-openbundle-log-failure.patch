@@ -1,0 +1,59 @@
+From 2c26229e4ce5a4538d2a4b4a3493a2e1c8af686d Mon Sep 17 00:00:00 2001
+From: ps5 <ps5@local>
+Date: Thu, 8 Oct 2026 13:32:45 +0000
+Subject: [PATCH] ps5: log a texture bundle that cannot be opened (once per
+ bundle) - a silent OpenBundle failure turns every bundled skin texture into
+ 'could not find texture' with no hint why
+
+---
+ xbmc/guilib/TextureBundleXBT.cpp | 11 +++++++++++
+ xbmc/guilib/TextureBundleXBT.h   |  2 ++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/xbmc/guilib/TextureBundleXBT.cpp b/xbmc/guilib/TextureBundleXBT.cpp
+index f557d28a26..7d2337758e 100644
+--- a/xbmc/guilib/TextureBundleXBT.cpp
++++ b/xbmc/guilib/TextureBundleXBT.cpp
+@@ -94,8 +94,18 @@ bool CTextureBundleXBT::OpenBundle()
+   // Load the texture file
+   if (!XFILE::CXbtManager::GetInstance().GetReader(CURL(m_path), m_XBTFReader))
+   {
++    // Logged once per bundle: HasFile() retries OpenBundle() for every texture
++    // lookup, and a silent failure here means every bundled skin texture
++    // (icons, highlights, splash) turns into "could not find texture" with no
++    // hint why. (On the PS5 this once hid a corrupted bundle path.)
++    if (!m_openFailureLogged)
++    {
++      m_openFailureLogged = true;
++      CLog::Log(LOGERROR, "{} - cannot open texture bundle '{}'", __FUNCTION__, m_path);
++    }
+     return false;
+   }
++  m_openFailureLogged = false;
+ 
+   CLog::Log(LOGDEBUG, "{} - Opened bundle {}", __FUNCTION__, m_path);
+ 
+@@ -103,6 +113,7 @@ bool CTextureBundleXBT::OpenBundle()
+ 
+   if (lzo_init() != LZO_E_OK)
+   {
++    CLog::Log(LOGERROR, "{} - lzo_init() failed; bundle '{}' unusable", __FUNCTION__, m_path);
+     return false;
+   }
+ 
+diff --git a/xbmc/guilib/TextureBundleXBT.h b/xbmc/guilib/TextureBundleXBT.h
+index 304605607f..66c3d3847b 100644
+--- a/xbmc/guilib/TextureBundleXBT.h
++++ b/xbmc/guilib/TextureBundleXBT.h
+@@ -69,6 +69,8 @@ private:
+ 
+   time_t m_TimeStamp;
+ 
++  bool m_openFailureLogged = false;
++
+   bool m_themeBundle;
+   std::string m_path;
+   std::shared_ptr<CXBTFReader> m_XBTFReader;
+-- 
+2.43.0
+

@@ -226,6 +226,8 @@ void CHdrOutputPS5::BindTarget(int width, int height)
     m_active = false;
     return;
   }
+  // (Completeness is checked once in CreateTarget: it cannot change while the
+  // attachments stay the same, so a per-frame check would add nothing.)
   glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
 }
 
@@ -253,6 +255,22 @@ void CHdrOutputPS5::Pack(int width, int height)
   glBindTexture(GL_TEXTURE_2D, 0);
   glUseProgram(0);
   glEnable(GL_DITHER);
+  // Diagnostic for the intermittent all-black HDR screen (sound plays, menus
+  // invisible): while HDR is active everything reaches the screen through this
+  // pack, so a persistent GL error would be silent and total. GL error flags
+  // stay set until read, so sampling about once a second catches the same
+  // errors as a per-frame glGetError() without a driver call every frame.
+  // Logged once per error code.
+  if ((++m_packFrames & 63u) == 0)
+  {
+    const GLenum err = glGetError();
+    if (err != GL_NO_ERROR && err != m_lastPackError)
+      CLog::Log(LOGERROR,
+                "CHdrOutputPS5: GL error {:#x} pending at the HDR pack ({}x{}); raised during "
+                "the last 64 frames",
+                static_cast<unsigned>(err), width, height);
+    m_lastPackError = err;
+  }
 }
 
 // ---- GUI compositing, as CWinSystemGbmGLContext (Kodi's Linux GL) does it ----

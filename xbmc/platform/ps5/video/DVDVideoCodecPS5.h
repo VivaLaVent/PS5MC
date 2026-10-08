@@ -20,6 +20,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 struct AVBSFContext;
@@ -147,6 +148,10 @@ private:
   // PS5 port and by EVO/Nuvio). Checked on the container's parameter sets so
   // Open() can hand the stream to FFmpeg up front.
   bool ParameterSetsUseTiles() const;
+  // The container's parameter sets as (offset, length) into m_parameterSets,
+  // split once whenever m_parameterSets changes (not once per access unit).
+  void RefreshContainerSets();
+  std::vector<std::pair<size_t, size_t>> m_containerSetSpans;
   bool m_loggedInbandSets = false;
   std::vector<uint8_t> m_annexB;
   bool m_loggedLengthPrefixed = false;

@@ -8,32 +8,20 @@
 
 #include "utils/MemUtils.h"
 
-#include <cstdarg>
-#include <cstdio>
-
-extern "C" int sceKernelDebugOutText(int, const char*);
-namespace { void Klogf(const char* fmt, ...) { char b[256]; va_list ap; va_start(ap, fmt); std::vsnprintf(b, sizeof b, fmt, ap); va_end(ap); sceKernelDebugOutText(0, b); } }
-
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <stdexcept>
 
+#include <sys/sysctl.h>
 #include <sys/types.h>
 
-#include <sys/sysctl.h>
-
-
 // Kodi's allocations live in one direct-memory heap managed by the ps5-opengl
-// template's app_heap.c, which counts its live bytes. The deploy appends these
-// two accessors to it; the weak versions here keep the plain CMake link of
-// kodi.bin (which does not include the template) working, and lose to the
-// template's strong ones in the eboot.
-// The direct-memory heap (ps5-opengl's app_heap.c) is linked into the eboot by
-// the native-app template and defines these as STRONG symbols; the weak
-// fallbacks here keep a plain kodi.bin link (and tests) working and lose to the
-// strong ones in the eboot. Resolved at LINK time - no constructor (one ran
-// during C++ static init and crashed in ios_base::Init) and no runtime lookup.
+// template's app_heap.c, which counts its live bytes. scripts/30-deploy.sh
+// appends these two accessors to it as strong symbols, which replace the weak
+// ones below when the eboot is linked. The weak versions keep a plain kodi.bin
+// link (built without the template) working: they report "no counters", and
+// GetMemoryStatus then falls back to physical memory.
 extern "C" __attribute__((weak)) size_t ps5_heap_capacity_value()
 {
   return 0;
@@ -71,12 +59,21 @@ void GetMemoryStatus(MemoryStatus* buffer)
   if (!buffer)
     return;
 
-  // 16 GiB GDDR6 shared with the GPU. There is no public API for the budget a
-  // homebrew title is actually granted, so report physical memory when the
-  // kernel answers and a conservative figure otherwise. Kodi only uses this
-  // for the system-info screen and cache-size heuristics.
-  // Asked once: Kodi's GUI polls this several times a second, and a refused
-  // sysctl ("hw.physmem is not approved") is logged by the kernel every time.
+  // Kodi's allocations live in the title's direct-memory heap; report its size
+  // and how much of it is in use. Kodi's GUI polls this several times a second,
+  // so this path stays allocation- and syscall-free.
+  const size_t capacity = ps5_heap_capacity_value();
+  if (capacity != 0)
+  {
+    const size_t live = ps5_heap_live_bytes_value();
+    buffer->totalPhys = capacity;
+    buffer->availPhys = live < capacity ? capacity - live : 0;
+    return;
+  }
+
+  // No heap counters (a plain kodi.bin without the native-app template): fall
+  // back to physical memory. Asked once - a title is refused hw.physmem and the
+  // kernel logs that refusal on every call.
   static uint64_t physmem = 0;
   if (physmem == 0)
   {
@@ -84,34 +81,8 @@ void GetMemoryStatus(MemoryStatus* buffer)
     if (sysctlbyname("hw.physmem", &physmem, &len, nullptr, 0) != 0 || physmem == 0)
       physmem = 5ULL * 1024 * 1024 * 1024;
   }
-
-  // Report Kodi's heap: its size and how much of it is in use. (The fixed
-  // "half of 5 GiB" this replaced always showed 2560/5120 MB.)
-  const size_t capacity = ps5_heap_capacity_value();
-  if (capacity != 0)
-  {
-    const size_t live = ps5_heap_live_bytes_value();
-    buffer->totalPhys = capacity;
-    buffer->availPhys = live < capacity ? capacity - live : 0;
-    static bool logged = false;
-    if (!logged)
-    {
-      logged = true;
-      Klogf("[kodi-ps5] memory: heap %llu MiB, %llu MiB live\n",
-            static_cast<unsigned long long>(capacity >> 20),
-            static_cast<unsigned long long>(live >> 20));
-    }
-    return;
-  }
-  buffer->totalPhys = physmem; // no heap counters registered: a static estimate
+  buffer->totalPhys = physmem;
   buffer->availPhys = physmem / 2;
-  static bool loggedEstimate = false;
-  if (!loggedEstimate)
-  {
-    loggedEstimate = true;
-    Klogf("[kodi-ps5] memory: no heap counters registered; estimating from physmem %llu MiB\n",
-          static_cast<unsigned long long>(physmem >> 20));
-  }
 }
 
 } // namespace MEMORY

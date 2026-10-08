@@ -208,20 +208,29 @@ plays them as noise.
 
 ### Switches
 
-Create an empty file with one of these names in `/data/homebrew/PPSA99420/` and
-start Kodi. The console protects files a title creates from outside processes,
-so FTP cannot delete Kodi's data; the first two let Kodi do it. There are no
-feature switches: this is an alpha, every feature is on, and the logs decide
-what gets fixed.
+A switch is an empty file with one of these names. Create it over FTP in either
+place, then start Kodi:
+
+- the title folder of a folder install: `/data/homebrew/PPSA99420/` (Kodi 22)
+  or `/data/homebrew/PPSA99421/` (Kodi 21);
+- the build's Kodi home: `/data/ps5mc/kodi22/` or `/data/ps5mc/kodi21/`. This
+  works for every install, including the `.exfat` image (which is read-only).
 
 | File | Effect |
 | --- | --- |
-| `kodi-reset` | wipe Kodi's save data once, then start fresh |
-| `kodi-uninstall` | wipe Kodi's save data and quit |
 | `kodi-debug` | debug-level logging (slower; remove when done) |
-| `kodi-home-data` | *(development)* keep Kodi's data in `/data/kodi` instead of the save data, when the sandbox is open |
+| `kodi-reset` | wipe this build's Kodi data once, then start fresh |
+| `kodi-uninstall` | wipe this build's Kodi data and quit |
+| `kodi-home-download0` | *(title folder only, development)* keep Kodi's data in the title's save data instead of `/data/ps5mc/...` |
+
+`kodi-reset` and `kodi-uninstall` only touch the build they run in: resetting
+Kodi 21 leaves the Kodi 22 library alone, and the other way round.
 
 ## Building
+
+*PS5MC is now a fork of Kodi: the day-to-day build and release flow is in
+`WORKFLOW.md`. The rest of this section describes the original overlay build,
+which still works for a plain Kodi checkout.*
 
 Kodi is not forked. This repository is an **overlay**: a `ps5` platform directory
 copied on top of a stock Kodi checkout, nineteen small Kodi patches, C shims that
