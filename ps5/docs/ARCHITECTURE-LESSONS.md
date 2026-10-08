@@ -169,6 +169,15 @@ from the Kodi 22 tree, and Kodi 22 changed the bundle format (XBTF version 2 ->
   in a build tool is silent: nothing fails until the target reads the output.
   `20-configure-kodi.sh` now builds TexturePacker and JsonSchemaBuilder per
   Kodi major; `30-deploy.sh` rejects any bundle the target cannot read.
+- **CMake caches what `find_program()` found.** Pointing an existing build
+  directory at a new tool (`-DWITH_TEXTUREPACKER=...`) changes nothing: the
+  old path stays in `CMakeCache.txt`. The first per-major build still packed
+  with the Kodi 22 tool for exactly that reason. Configure now clears the
+  cached tool paths (`-U`) and then checks what CMake actually resolved.
+- **A check that runs after the success marker must still decide.** The
+  deploy's bundle check fired, but the release script judged the deploy by
+  "Build complete" (printed earlier) and packaged the bad build anyway. It now
+  uses the deploy's exit status.
 - **Read the log for what it says.** The diagnostic printed the bundle path
   *after* translation, and it was correct; a few `/media/Textures.xbt` lines
   were the harmless probes Kodi makes before a skin is loaded. Reading them as
