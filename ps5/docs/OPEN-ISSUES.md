@@ -20,6 +20,23 @@ full-screen image is missing; if one is, instrument that upload.
 
 ## Open
 
+**Closing an idle HTTP(S) connection can stall** (patch 0016 moved it off the
+GUI thread: it froze the GUI for ~35 s). Possibly also delays the start of
+HTTP playback after a HEAD request. liujiny's kodi-ps5 fork patches libcurl to
+read with `MSG_DONTWAIT` there, on the theory that `fcntl(O_NONBLOCK)` has no
+effect on PS5 sockets - simulated on a PC, not verified on hardware.
+*Measure first:* with `kodi-debug` on, the network self-test logs
+`sockets: fcntl(O_NONBLOCK) ... -> non-blocking|BLOCKED`, the same for
+`MSG_DONTWAIT` and sceNet `SO_NBIO`, and a `sockets verdict:` line. If
+`fcntl` is BLOCKED but `SO_NBIO` works, fix it once in the `fcntl` shim (set
+`SO_NBIO` too: covers curl, its TLS shutdown, libsmb2, UPnP); if `fcntl`
+works, the stall is elsewhere (TLS shutdown).
+
+**UPnP discovery** (fixed in 1.3, from liujiny's fork): Neptune now lists
+interfaces with `getifaddrs`. *Confirm:* the self-test line `interfaces:
+ioctl(SIOCGIFCONF) REFUSED ...` shows the old path failed; Add videos >
+Browse > UPnP devices lists a DLNA server on the network.
+
 **Intermittent black screen on some 4K HDR films** (sound plays, menus
 invisible). No reproducer yet: the one reported file turned out to be Dolby
 Vision profile 5 (now decoded in software). Diagnostics in place: a GL error
