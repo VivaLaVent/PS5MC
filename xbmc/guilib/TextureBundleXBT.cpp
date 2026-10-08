@@ -94,15 +94,18 @@ bool CTextureBundleXBT::OpenBundle()
   // Load the texture file
   if (!XFILE::CXbtManager::GetInstance().GetReader(CURL(m_path), m_XBTFReader))
   {
+    CLog::Log(LOGERROR, "{} - FAILED to open bundle {} (reader/open)", __FUNCTION__, m_path);
     return false;
   }
 
-  CLog::Log(LOGDEBUG, "{} - Opened bundle {}", __FUNCTION__, m_path);
+  CLog::Log(LOGINFO, "{} - Opened bundle {}", __FUNCTION__, m_path);
 
   m_TimeStamp = m_XBTFReader->GetLastModificationTimestamp();
 
   if (lzo_init() != LZO_E_OK)
   {
+    CLog::Log(LOGERROR, "{} - lzo_init() FAILED for bundle {} (lzo2 library problem)",
+              __FUNCTION__, m_path);
     return false;
   }
 
