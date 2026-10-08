@@ -38,10 +38,14 @@ klog trace before each step. The test add-on ships in `ps5/addons/test.binary.ps
 SQLite and dependency resolution were measured and ruled out. The unpack/write
 phase is unmeasured. *Next:* one timer around it (debug logging on), then fix.
 
-**Dolby Vision profile 5** has no HDR10 base layer; it is routed to FFmpeg
-(software) instead of showing green/purple. A real fix reshapes it per frame
-on the GPU from the RPU (Nuvio-PS5 does this; it is GPL-3, so reimplement from
-the specification rather than copy). Large feature, not started.
+**Dolby Vision profile 5** has no HDR10 base layer and shows a green/purple
+tint. Since 1.2 it is routed to FFmpeg (software), but software decoding does
+not apply Dolby Vision's per-frame colour reshaping either, so the colours are
+most likely still wrong - *unverified on the console*. *Next:* play a profile 5
+file on 1.2; if it is still tinted, route it back to the hardware decoder (same
+colours, smoother at 4K). A real fix reshapes it per frame on the GPU from the
+RPU (Nuvio-PS5 does this; it is GPL-3, so reimplement from the specification
+rather than copy). Large feature, not started.
 
 **Thread stacks and flexible memory.** Every thread gets an 8 MiB stack
 (`shims/native-app/thread_stack.c`; 1 MiB overflowed during thumbnail
