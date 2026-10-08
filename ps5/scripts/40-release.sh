@@ -49,9 +49,13 @@ for v in "${VARIANTS[@]}"; do
   grep -E '==> (source mode|build stamp)' "$OUT/$name-configure.log"
   # KEEP_GOING=1: don't stop at the first failing file - report every error in
   # one run (for porting rounds; the artifact checks below still gate success).
+  KODI_SRC="$FORK" bash "$SCRIPTS/lib/write-build-stamp.sh"
   cmake --build "$bdir" -j"$(nproc)" ${KEEP_GOING:+-- -k 0} > "$OUT/$name-build.log" 2>&1 \
     || { echo "!! $name: build failed:"; grep -nE 'error:|FAILED' "$OUT/$name-build.log" | head; exit 1; }
-  KODI_SRC="$FORK" BUILD="$bdir" STAGE="$sdir" TITLE_ID="$tid" TITLE_NAME="$tname" \
+  # contentVersion for the store: 01.000.0NN from the numeric release version
+  # (1.2 -> 01.000.012, 1.11 -> 01.000.011... keep tags <= x.99). Rises per tag.
+  CVER=$(printf '01.000.0%02d' "$(printf '%s' "$VER" | awk -F. '{printf (($1*10)+$2)%100}')")
+  KODI_SRC="$FORK" BUILD="$bdir" STAGE="$sdir" TITLE_ID="$tid" TITLE_NAME="$tname" CONTENT_VERSION="$CVER" \
     bash "$SCRIPTS/30-deploy.sh" > "$OUT/$name-deploy.log" 2>&1
   grep -q 'Build complete' "$OUT/$name-deploy.log" || { echo "!! $name: deploy/package failed - see $OUT/$name-deploy.log"; grep '!!' "$OUT/$name-deploy.log"; exit 1; }
   DIST="$sdir/app/dist/$tid"
@@ -63,6 +67,7 @@ for v in "${VARIANTS[@]}"; do
   rm -f "$ZIP"; ( cd "$sdir/app/dist" && zip -qr "$ZIP" "$tid" )
   echo "==> $name: $(basename "$ZIP") ($(stat -c%s "$ZIP") bytes, eboot $(stat -c%s "$DIST/eboot.bin") bytes)"
   built+=("$ZIP")
+  git -C "$FORK" checkout -q -- xbmc/platform/ps5/BuildStamp.h 2>/dev/null || true
 done
 git checkout -q "$START_BRANCH"
 

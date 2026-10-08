@@ -113,6 +113,18 @@ void CDVDVideoCodecPS5::Register()
 
 bool CDVDVideoCodecPS5::Open(CDVDStreamInfo& hints, CDVDCodecOptions& options)
 {
+  // Dolby Vision profile 5 has no HDR10 base layer: its pictures are in the IPT
+  // colour space and need per-frame DV reshaping the PS5 hardware does not do,
+  // so they come out green/purple. Profiles 7/8 carry an HDR10 base (handled -
+  // the DV RPU/EL NALs are stripped elsewhere), but profile 5 has nothing we
+  // can show correctly. Hand it to FFmpeg, which at least tone-maps it.
+  if (hints.codec == AV_CODEC_ID_HEVC && hints.dovi.dv_profile == 5)
+  {
+    CLog::Log(LOGINFO, "CDVDVideoCodecPS5: Dolby Vision profile 5 (no HDR10 base); the hardware "
+                       "cannot reshape it (would be green), using FFmpeg");
+    return false;
+  }
+
   VideoDec2Codec codec;
   if (hints.codec == AV_CODEC_ID_H264 && IsH264Supported(hints.profile))
     codec = VideoDec2Codec::H264;
@@ -184,6 +196,13 @@ bool CDVDVideoCodecPS5::Open(CDVDStreamInfo& hints, CDVDCodecOptions& options)
   }
   m_hints = hints;
   BuildParameterSets(hints);
+  if (m_hevc && ParameterSetsUseTiles())
+  {
+    CLog::Log(LOGINFO, "CDVDVideoCodecPS5: HEVC coded in tiles, which the hardware decoder does not "
+                       "support: using FFmpeg");
+    m_decoder->Close();
+    return false;
+  }
   m_prependParameterSets = !m_parameterSets.empty();
   if (!SetupBitstreamFilter(hints))
   {
@@ -624,6 +643,16 @@ bool CDVDVideoCodecPS5::DecodeOne(const uint8_t* data, size_t size)
     if (m_timeDecodes)
       CLog::Log(LOGINFO, "CDVDVideoCodecPS5: parameter sets ({} bytes) prepended to the first access unit",
                 m_parameterSets.size());
+  }
+  // The container's parameter sets are prepended above and inserted again by
+  // the annexb filter right before the picture. When the stream has its own,
+  // different, ones, those copies override them and the decoder refuses the
+  // access unit (0x811D0301, seen on a 4K HEVC MKV). Keep the stream's own.
+  std::vector<uint8_t> withoutInjected;
+  if (DropInjectedParameterSets(data, size, withoutInjected))
+  {
+    data = withoutInjected.data();
+    size = withoutInjected.size();
   }
   bool gotPicture = false;
   const auto decodeStart = std::chrono::steady_clock::now();
@@ -1541,4 +1570,115 @@ void CDVDVideoCodecPS5::LogFingerprint(const char* what, const uint8_t* data, si
             "CDVDVideoCodecPS5: {} ({} bytes; stream profile {}, level {}, {}x{}, {} bit):{}", what,
             size, m_hints.profile, m_hints.level, m_hints.width, m_hints.height,
             m_hints.bitsperpixel, text.empty() ? " (no NAL units)" : text);
+}
+
+bool CDVDVideoCodecPS5::DropInjectedParameterSets(const uint8_t* data, size_t size,
+                                                  std::vector<uint8_t>& out)
+{
+  if (m_vp9 || m_parameterSets.empty() || !data || size == 0)
+    return false;
+  auto psType = [&](const NalRef& n) -> int {
+    if (n.n == 0)
+      return -1;
+    const unsigned t = m_hevc ? (n.p[0] >> 1) & 0x3f : n.p[0] & 0x1f;
+    if (m_hevc)
+      return (t >= 32 && t <= 34) ? static_cast<int>(t) : -1; // VPS SPS PPS
+    return (t == 7 || t == 8) ? static_cast<int>(t) : -1;     // SPS PPS
+  };
+  const std::vector<NalRef> container = SplitAnnexB(m_parameterSets.data(), m_parameterSets.size());
+  auto isContainerCopy = [&](const NalRef& n) {
+    for (const NalRef& c : container)
+      if (c.n == n.n && std::memcmp(c.p, n.p, n.n) == 0)
+        return true;
+    return false;
+  };
+  const std::vector<NalRef> nals = SplitAnnexB(data, size);
+  bool inband[64] = {};
+  bool any = false;
+  for (const NalRef& n : nals)
+  {
+    const int t = psType(n);
+    if (t >= 0 && !isContainerCopy(n))
+      inband[t] = any = true;
+  }
+  // HEVC types 48..63 are "unspecified": a decoder must ignore them, so dropping
+  // them cannot change a correct picture. Dolby Vision's RPU (62) and
+  // enhancement layer (63) live there; the PS5 decoder can refuse an access
+  // unit carrying them, which used to cost a refused start before recovery
+  // stripped them. Stripped up front (the unofficial Stremio PS5 port found
+  // the same and does likewise).
+  bool unspecified = false;
+  if (m_hevc)
+    for (const NalRef& n : nals)
+      if (n.n && ((n.p[0] >> 1) & 0x3f) >= 48)
+      {
+        unspecified = true;
+        break;
+      }
+  if (!any && !unspecified)
+    return false; // nothing to change: leave the access unit alone
+  static const uint8_t startCode[4] = {0, 0, 0, 1};
+  out.clear();
+  out.reserve(size);
+  unsigned dropped = 0;
+  for (const NalRef& n : nals)
+  {
+    const int t = psType(n);
+    if (t >= 0 && inband[t] && isContainerCopy(n))
+    {
+      ++dropped; // the container's copy of a type the stream sends itself
+      continue;
+    }
+    if (m_hevc && n.n && ((n.p[0] >> 1) & 0x3f) >= 48)
+      continue; // unspecified (Dolby Vision RPU / EL): ignored by decoders anyway
+    out.insert(out.end(), startCode, startCode + 4);
+    out.insert(out.end(), n.p, n.p + n.n);
+  }
+  if (any && !m_loggedInbandSets)
+  {
+    m_loggedInbandSets = true;
+    CLog::Log(LOGINFO,
+              "CDVDVideoCodecPS5: {} carries its own parameter sets, different from the container's; "
+              "using the stream's ({} container copies dropped from this access unit)",
+              m_streamName, dropped);
+  }
+  return true;
+}
+
+bool CDVDVideoCodecPS5::ParameterSetsUseTiles() const
+{
+  // tiles_enabled_flag sits after a fixed run of PPS header fields; walked
+  // here straight from the H.265 syntax (7.3.2.3.1), on the RBSP (emulation-
+  // prevention bytes removed).
+  for (const NalRef& nal : SplitAnnexB(m_parameterSets.data(), m_parameterSets.size()))
+  {
+    if (nal.n < 3 || ((nal.p[0] >> 1) & 0x3f) != 34) // PPS only
+      continue;
+    const std::vector<uint8_t> rbsp = RbspHead(nal, 2);
+    Bits b{rbsp};
+    b.Ue();          // pps_pic_parameter_set_id
+    b.Ue();          // pps_seq_parameter_set_id
+    b.Read(1);       // dependent_slice_segments_enabled_flag
+    b.Read(1);       // output_flag_present_flag
+    b.Read(3);       // num_extra_slice_header_bits
+    b.Read(1);       // sign_data_hiding_enabled_flag
+    b.Read(1);       // cabac_init_present_flag
+    b.Ue();          // num_ref_idx_l0_default_active_minus1
+    b.Ue();          // num_ref_idx_l1_default_active_minus1
+    b.Ue();          // init_qp_minus26 (se: same length as ue)
+    b.Read(1);       // constrained_intra_pred_flag
+    b.Read(1);       // transform_skip_enabled_flag
+    if (b.Read(1))   // cu_qp_delta_enabled_flag
+      b.Ue();        //   diff_cu_qp_delta_depth
+    b.Ue();          // pps_cb_qp_offset (se)
+    b.Ue();          // pps_cr_qp_offset (se)
+    b.Read(1);       // pps_slice_chroma_qp_offsets_present_flag
+    b.Read(1);       // weighted_pred_flag
+    b.Read(1);       // weighted_bipred_flag
+    b.Read(1);       // transquant_bypass_enabled_flag
+    const unsigned tiles = b.Read(1); // tiles_enabled_flag
+    if (b.ok && tiles)
+      return true;
+  }
+  return false;
 }

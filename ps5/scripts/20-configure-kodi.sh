@@ -61,16 +61,10 @@ if [ "$MODE" = fork ]; then
   STAMP="$(git -C "$KODI_SRC" describe --always --tags --dirty 2>/dev/null || echo unknown)"
   KODI_BRANCH="$(git -C "$KODI_SRC" rev-parse --abbrev-ref HEAD 2>/dev/null)"
   STAMP="${KODI_BRANCH}-${STAMP}"
-  STAMP_H="$KODI_SRC/xbmc/platform/ps5/BuildStamp.h"
-  if [ -f "$STAMP_H" ]; then
-    sed -i "s/#define KODI_PS5_BUILD_STAMP \"[^\"]*\"/#define KODI_PS5_BUILD_STAMP \"$STAMP\"/" "$STAMP_H"
-    # The stamp edit is a working-tree change that must never be committed or
-    # trip a clean-tree check: hide it from git while this script runs and
-    # restore the committed file on ANY exit (failed configure included).
-    git -C "$KODI_SRC" update-index --assume-unchanged "xbmc/platform/ps5/BuildStamp.h" 2>/dev/null || true
-    trap 'git -C "$KODI_SRC" update-index --no-assume-unchanged xbmc/platform/ps5/BuildStamp.h 2>/dev/null; git -C "$KODI_SRC" checkout -q -- xbmc/platform/ps5/BuildStamp.h 2>/dev/null' EXIT
-    echo "==> build stamp: $STAMP"
-  fi
+  # NOTE: BuildStamp.h is written by 30-deploy.sh right before the eboot is
+  # assembled, NOT here. Writing it in configure and reverting it on exit (to
+  # keep the tree clean) meant main.cpp compiled against the reverted "unknown".
+  echo "==> build stamp (written at deploy): $STAMP"
   echo "==> Kodi series: $(git -C "$KODI_SRC" log --oneline | grep -c '^[0-9a-f]* ps5') ps5 commits on $KODI_BRANCH"
 else
 # only partly before) cannot leave a mixed file behind.

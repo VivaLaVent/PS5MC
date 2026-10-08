@@ -229,14 +229,17 @@ BUILTINS="$(clang-18 --print-resource-dir)/lib/linux/libclang_rt.builtins-x86_64
 printf 'APP_STATIC_ARCHIVES = vendor/libkodi_group.a\n' > "$APP/.env"
 
 echo "==> 4. title metadata"
-python3 - "$APP/sce_sys/param.json" "$TITLE_ID" "$TITLE_NAME" <<'PY'
+python3 - "$APP/sce_sys/param.json" "$TITLE_ID" "$TITLE_NAME" "${CONTENT_VERSION:-01.000.000}" <<'PY'
 import json, os, sys
-path, tid, tname = sys.argv[1], sys.argv[2], sys.argv[3]
+path, tid, tname, cver = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 p = json.load(open(path))
 p["titleId"] = tid
 p["conceptId"] = tid[4:]
 p["contentId"] = f"UP9000-{tid}_00-KODIPS5000000001"
-p["contentVersion"] = "01.000.000"
+# Store-update gate: must be 01.000.0xx format and rise each release, or the
+# store never offers an update. 40-release derives it from the version tag and
+# passes CONTENT_VERSION; a manual deploy uses the 01.000.000 default.
+p["contentVersion"] = cver
 p["masterVersion"] = "01.00"
 p["downloadDataSize"] = max(int(p.get("downloadDataSize", 0)), 2048)  # /download0 = Kodi's home
 # Home-screen area (boilerplate docs/CONFIGURATION.md):
