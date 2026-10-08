@@ -209,6 +209,18 @@ std::string CSpecialProtocol::TranslatePathConvertCase(const std::string& path)
 {
   std::string translatedPath = TranslatePath(path);
 
+#if defined(TARGET_PS5)
+  // On the PS5 every path is already correct-case (the title image /app0 and the
+  // /data home are stored with the exact names Kodi uses), so no case conversion
+  // is needed. The POSIX walk below statted and opendir()'d each path component
+  // to case-fold it; in the title sandbox those calls do not behave as it
+  // assumes and it CORRUPTED a correct path - e.g. the skin bundle
+  // /app0/share/kodi/addons/skin.estuary/media/Textures.xbt collapsed to
+  // /media/Textures.xbt, so every bundled texture (icons, highlights, splash)
+  // failed to load. Return the straight translation.
+  return translatedPath;
+#endif
+
 #ifdef TARGET_POSIX
   if (translatedPath.find("://") != std::string::npos)
     return translatedPath;
