@@ -196,6 +196,7 @@ bool CDVDVideoCodecPS5::Open(CDVDStreamInfo& hints, CDVDCodecOptions& options)
   }
   m_hints = hints;
   BuildParameterSets(hints);
+  RefreshContainerSets();
   if (m_hevc && ParameterSetsUseTiles())
   {
     CLog::Log(LOGINFO, "CDVDVideoCodecPS5: HEVC coded in tiles, which the hardware decoder does not "
@@ -1239,6 +1240,34 @@ struct NalRef
 };
 
 // Annex-B access unit -> NAL unit payloads (without start codes)
+// First j >= i with d[j..j+2] == 00 00 01 (and j + 3 <= n), or n if none.
+// Word-at-a-time: a start code begins with a zero byte, so an 8-byte block
+// without any zero byte cannot contain the start of one and is skipped whole.
+size_t FindStartCode3(const uint8_t* d, size_t i, size_t n)
+{
+  if (n < 3)
+    return n;
+  const size_t last = n - 3; // highest position a start code can begin at
+  while (i <= last)
+  {
+    if (i + 8 <= n)
+    {
+      uint64_t x;
+      std::memcpy(&x, d + i, sizeof(x));
+      if (((x - 0x0101010101010101ull) & ~x & 0x8080808080808080ull) == 0)
+      {
+        i += 8; // no zero byte in d[i..i+7]
+        continue;
+      }
+    }
+    const size_t stop = std::min(i + 8, last + 1);
+    for (; i < stop; ++i)
+      if (d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 1)
+        return i;
+  }
+  return n;
+}
+
 std::vector<NalRef> SplitAnnexB(const uint8_t* d, size_t n)
 {
   std::vector<NalRef> out;
@@ -1246,20 +1275,16 @@ std::vector<NalRef> SplitAnnexB(const uint8_t* d, size_t n)
   size_t start = SIZE_MAX;
   while (i < n)
   {
-    size_t len = 0;
-    if (i + 4 <= n && d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 0 && d[i + 3] == 1)
-      len = 4;
-    else if (i + 3 <= n && d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 1)
-      len = 3;
-    if (len)
-    {
-      if (start != SIZE_MAX && i > start)
-        out.push_back({d + start, i - start});
-      i += len;
-      start = i;
-    }
-    else
-      ++i;
+    const size_t j = FindStartCode3(d, i, n);
+    if (j >= n)
+      break;
+    // A 4-byte start code at j-1 (00 00 00 01) is the one a byte-wise scan
+    // would meet first; otherwise the 3-byte code at j.
+    const size_t at = (j > i && d[j - 1] == 0) ? j - 1 : j;
+    if (start != SIZE_MAX && at > start)
+      out.push_back({d + start, at - start});
+    i = at + (at == j ? 3 : 4);
+    start = i;
   }
   if (start != SIZE_MAX && start < n)
     out.push_back({d + start, n - start});
@@ -1402,6 +1427,7 @@ bool CDVDVideoCodecPS5::RunRecovery()
     bool irap = false, hasSlice = false;
     CleanAccessUnit(m_parameterSets.data(), m_parameterSets.size(), cleanedSets, irap, hasSlice);
     m_parameterSets = std::move(cleanedSets);
+    RefreshContainerSets();
     m_prependParameterSets = !m_parameterSets.empty();
     const std::deque<ReplayPacket> replay = m_replay; // stage 2 needs it again
     for (const ReplayPacket& r : replay)
@@ -1585,10 +1611,10 @@ bool CDVDVideoCodecPS5::DropInjectedParameterSets(const uint8_t* data, size_t si
       return (t >= 32 && t <= 34) ? static_cast<int>(t) : -1; // VPS SPS PPS
     return (t == 7 || t == 8) ? static_cast<int>(t) : -1;     // SPS PPS
   };
-  const std::vector<NalRef> container = SplitAnnexB(m_parameterSets.data(), m_parameterSets.size());
+  // the container's sets, split once per stream (RefreshContainerSets), not per access unit
   auto isContainerCopy = [&](const NalRef& n) {
-    for (const NalRef& c : container)
-      if (c.n == n.n && std::memcmp(c.p, n.p, n.n) == 0)
+    for (const auto& [offset, length] : m_containerSetSpans)
+      if (length == n.n && std::memcmp(m_parameterSets.data() + offset, n.p, n.n) == 0)
         return true;
     return false;
   };
@@ -1681,4 +1707,11 @@ bool CDVDVideoCodecPS5::ParameterSetsUseTiles() const
       return true;
   }
   return false;
+}
+
+void CDVDVideoCodecPS5::RefreshContainerSets()
+{
+  m_containerSetSpans.clear();
+  for (const NalRef& nal : SplitAnnexB(m_parameterSets.data(), m_parameterSets.size()))
+    m_containerSetSpans.emplace_back(static_cast<size_t>(nal.p - m_parameterSets.data()), nal.n);
 }

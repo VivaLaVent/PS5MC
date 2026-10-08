@@ -93,9 +93,10 @@ instead of `exit()`ing mid-startup). Both improve every platform.
 - **Video output patches (0011–0014, VRR/HDR/HLG→PQ/PBO)** — working, not
   touched. No lesson above applies to them; changing a working renderer to
   satisfy a tidiness impulse is exactly the risk this pass is meant to avoid.
-- **The JIT probe** — gated behind the `kodi-jitprobe` switch file, inert
-  otherwise. It is the feasibility test for the binary-add-on loader, not
-  leftover noise.
+- **The JIT probe** — kept in that pass as the feasibility test for the
+  binary-add-on loader. *Removed in the 2026-10-08 cleanup:* the in-process
+  ELF loader now maps executable memory itself and logs its own failures, so
+  the standalone probe no longer answers anything the loader does not.
 - **`stdio_tee` (`--wrap=write` → klog)** — kept. It is why Python fatal
   errors are now visible; cost is one integer compare per write.
 - **Failure-only `pysock` error logging** — kept. Fires only when a `sceNet`
@@ -104,6 +105,9 @@ instead of `exit()`ing mid-startup). Both improve every platform.
   cheap, and they confirm a deploy is real. Removable later if wanted.
 
 ## 7. Open, and how to attack it with the above
+
+*Superseded: the current list is `OPEN-ISSUES.md`. The entries below are the
+state at the time of this consolidation.*
 
 - **Add-on install slowness (not network).** Downloads are fast; curl is
   healthy. Ruled out: curl reset/teardown, SQLite, `CheckDependencies`.
@@ -143,3 +147,33 @@ instead of `exit()`ing mid-startup). Both improve every platform.
   logging *what the decoder was given* beats guessing *why it refused*.
 - **Other PS5 projects confirm the scarce flexible-memory pool** (EVO Player
   shrinks buffers to give memory back to it). Thread stacks come out of it too.
+
+## 10. The Kodi 21 missing-icons hunt (2026-10)
+
+Kodi 21's skin showed text and backgrounds but no icons, buttons or
+highlights. Six wrong theories (binary image decoder, DXT upload, texture
+size, lzo, a broken `fopen` on `/app0`, path case-folding) each got a patch or
+a diagnostic build before the cause was found: **the texture bundle was in a
+format Kodi 21 cannot read.** Both builds used one host TexturePacker, built
+from the Kodi 22 tree, and Kodi 22 changed the bundle format (XBTF version 2 ->
+3). Lessons, cheapest first:
+
+- **Compare against the working twin before theorizing.** Kodi 22 rendered
+  the same skin with the same libc, sandbox, `fopen` and path code. Any theory
+  that would also have broken Kodi 22 was dead on arrival - that rules out
+  four of the six without a single build.
+- **A file that exists but "will not open": check what is in it.** `head -c 5
+  Textures.xbt` (`XBTF3`) against the reader's expected version would have
+  found it in one command.
+- **Host tools must come from the same tree as the target.** A format change
+  in a build tool is silent: nothing fails until the target reads the output.
+  `20-configure-kodi.sh` now builds TexturePacker and JsonSchemaBuilder per
+  Kodi major; `30-deploy.sh` rejects any bundle the target cannot read.
+- **Read the log for what it says.** The diagnostic printed the bundle path
+  *after* translation, and it was correct; a few `/media/Textures.xbt` lines
+  were the harmless probes Kodi makes before a skin is loaded. Reading them as
+  "the path is corrupted" produced patch 0036, now reverted.
+- **A diagnostic must be able to fire on the format under test.** The switch
+  file that enabled the `fopen` logs cannot live inside a read-only exFAT
+  image, so the logs never ran and their absence was misread as evidence.
+  Switches are now also read from the build's `/data` home.

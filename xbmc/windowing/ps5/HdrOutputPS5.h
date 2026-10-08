@@ -85,6 +85,9 @@ private:
   int m_guiFboWidth = 0;
   int m_guiFboHeight = 0;
   std::unique_ptr<CGuiCompositeShaderGL> m_compositeShader;
+  // failure-only diagnostics (see BindTarget / Pack)
+  GLenum m_lastPackError{GL_NO_ERROR};
+  unsigned m_packFrames{0};
 };
 
 

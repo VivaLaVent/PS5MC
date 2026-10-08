@@ -54,6 +54,8 @@ if [ "$MODE" = fork ]; then
      ! grep -q "TARGET_PS5" "$KODI_SRC/xbmc/utils/TimeUtils.cpp"; then
     echo "!! $KODI_SRC does not carry the ps5 platform series (checkout ps5-piers or ps5-omega)"; exit 1
   fi
+  # BuildStamp.h is generated per build; a failed build may have left it modified
+  git -C "$KODI_SRC" checkout -q -- xbmc/platform/ps5/BuildStamp.h 2>/dev/null || true
   if [ -n "$(git -C "$KODI_SRC" status --porcelain 2>/dev/null)" ]; then
     echo "!! $KODI_SRC has uncommitted changes; commit them (the stamp must name a real commit)"; exit 1
   fi
@@ -61,10 +63,10 @@ if [ "$MODE" = fork ]; then
   STAMP="$(git -C "$KODI_SRC" describe --always --tags --dirty 2>/dev/null || echo unknown)"
   KODI_BRANCH="$(git -C "$KODI_SRC" rev-parse --abbrev-ref HEAD 2>/dev/null)"
   STAMP="${KODI_BRANCH}-${STAMP}"
-  # NOTE: BuildStamp.h is written by 30-deploy.sh right before the eboot is
-  # assembled, NOT here. Writing it in configure and reverting it on exit (to
-  # keep the tree clean) meant main.cpp compiled against the reverted "unknown".
-  echo "==> build stamp (written at deploy): $STAMP"
+  # The stamp itself is written into BuildStamp.h by lib/write-build-stamp.sh
+  # (40-release.sh, between this configure and the build) - writing it here and
+  # reverting it on exit once left main.cpp compiled with "unknown".
+  echo "==> source: $STAMP"
   echo "==> Kodi series: $(git -C "$KODI_SRC" log --oneline | grep -c '^[0-9a-f]* ps5') ps5 commits on $KODI_BRANCH"
 else
 # only partly before) cannot leave a mixed file behind.
@@ -201,6 +203,27 @@ fi
 # Host tools are passed as BINARY paths, not their dir: Kodi 21's find-modules
 # strip one path component unconditionally (a dir became its parent ->
 # "not found"); 22's check IS_DIRECTORY first. The binary path satisfies both.
+# Host tools (TexturePacker, JsonSchemaBuilder) are built from THIS Kodi tree,
+# per Kodi major: Kodi 22 changed the texture-bundle format (XBTF version 3)
+# and Kodi 21 cannot read it, so a shared tool silently gave the 21 build a
+# skin with no icons. Rebuilt when the tools' or the format's sources change.
+KODI_MAJOR="$(sed -n 's/^VERSION_MAJOR *//p' "$KODI_SRC/version.txt" 2>/dev/null)"
+HOSTTOOLS="$NATIVE/kodi${KODI_MAJOR:-unknown}"
+HOSTTOOLS_REV="$( { git -C "$KODI_SRC" rev-parse HEAD:tools/depends/native/TexturePacker \
+    HEAD:tools/depends/native/JsonSchemaBuilder HEAD:xbmc/guilib/XBTF.h HEAD:xbmc/guilib/XBTF.cpp \
+    2>/dev/null || echo "kodi$KODI_MAJOR"; } | sha1sum | cut -c1-12)"
+if [ ! -x "$HOSTTOOLS/bin/TexturePacker" ] || [ ! -x "$HOSTTOOLS/bin/JsonSchemaBuilder" ] ||
+   [ "$(cat "$HOSTTOOLS/.source-rev" 2>/dev/null)" != "$HOSTTOOLS_REV" ]; then
+  echo "==> host tools for Kodi $KODI_MAJOR: building from $KODI_SRC"
+  mkdir -p "$HOSTTOOLS"
+  KODI_SRC="$KODI_SRC" NATIVE="$NATIVE" PREFIX="$HOSTTOOLS" bash "$HERE/scripts/10-build-host-tools.sh" \
+    > "$HOSTTOOLS/build.log" 2>&1 || { echo "!! host tools failed - see $HOSTTOOLS/build.log"; tail -15 "$HOSTTOOLS/build.log"; exit 1; }
+  echo "$HOSTTOOLS_REV" > "$HOSTTOOLS/.source-rev"
+  # texture bundles packed by another TexturePacker must be packed again
+  find "$BUILD" -name '*.xbt' -delete 2>/dev/null || true
+fi
+echo "==> host tools: $HOSTTOOLS/bin (Kodi $KODI_MAJOR)"
+
 cmake -S "$KODI_SRC" -B "$BUILD" -G Ninja \
   -U "FFMPEG_*" -U "Python3_*" -U "PYTHON_*" \
   -DCMAKE_TOOLCHAIN_FILE="$HERE/toolchain/ps5-kodi.cmake" \
@@ -208,8 +231,8 @@ cmake -S "$KODI_SRC" -B "$BUILD" -G Ninja \
   -DCMAKE_C_FLAGS_RELEASE="-O2 -g -DNDEBUG" \
   -DCMAKE_CXX_FLAGS_RELEASE="-O2 -g -DNDEBUG" \
   -DCMAKE_INSTALL_PREFIX=/app0 \
-  -DWITH_TEXTUREPACKER="$NATIVE/bin/TexturePacker" \
-  -DWITH_JSONSCHEMABUILDER="$NATIVE/bin/JsonSchemaBuilder" \
+  -DWITH_TEXTUREPACKER="$HOSTTOOLS/bin/TexturePacker" \
+  -DWITH_JSONSCHEMABUILDER="$HOSTTOOLS/bin/JsonSchemaBuilder" \
   -DNATIVEPREFIX="$NATIVE" \
   -DPKG_CONFIG_EXECUTABLE="$BUILD/kodi-pkg-config" \
   -DINTERNAL_TEXTUREPACKER_INSTALLABLE=FALSE \

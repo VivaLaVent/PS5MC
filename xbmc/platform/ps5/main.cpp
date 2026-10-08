@@ -8,7 +8,6 @@
 
 #include "application/AppEnvironment.h"
 #include "platform/ps5/BuildStamp.h"
-#include "platform/ps5/JitProbe.h"
 #include "application/AppParamParser.h"
 #include "application/AppParams.h"
 #include "platform/xbmc.h"
@@ -31,11 +30,6 @@
 #include <unistd.h>
 
 extern "C" int sceKernelDebugOutText(int channel, const char* text);
-// FreeBSD <dirent.h> declares these only with __BSD_VISIBLE; used by the
-// directory diagnostics below.
-extern "C" int getdents(int fd, char* buf, int nbytes);
-extern "C" int getdirentries(int fd, char* buf, int nbytes, long* basep);
-
 // The few SQLite calls the startup probe needs (libsqlite3 is linked into
 // Kodi; its header lives outside the kodi target's include path).
 extern "C"
@@ -115,6 +109,12 @@ void Klogf(const char* fmt, ...)
 
 void SqliteLog(void*, int code, const char* msg)
 {
+  // SQLite also reports routine notices and warnings here (SQLITE_NOTICE 27,
+  // SQLITE_WARNING 28 - e.g. 284 "automatic index on ..." on many library
+  // queries). Only real problems are worth a klog line.
+  const int primary = code & 0xff;
+  if (primary == 27 || primary == 28)
+    return;
   Klogf("[kodi-ps5]   sqlite log (%d): %s\n", code, msg);
 }
 
@@ -448,6 +448,30 @@ static bool SwitchPresent(const char* path)
   return false;
 }
 
+// This build's home on /data (ShadowMountPlus mounts /data into the sandbox).
+// Per Kodi major, so the Kodi 22 and Kodi 21 builds never share - or wipe -
+// each other's library.
+#if PS5_KODI_MAJOR >= 22
+static const char* const kDataHome = "/data/ps5mc/kodi22";
+#else
+static const char* const kDataHome = "/data/ps5mc/kodi21";
+#endif
+
+// A switch file is looked for in the title folder (a folder install,
+// /data/homebrew/<TITLE_ID>) and in this build's /data home, where it can be
+// created over FTP whatever the install format - an exFAT image is read-only.
+// Returns the full path of the switch found, or an empty string.
+static std::string FindSwitch(const char* name)
+{
+  for (const std::string& dir : {std::string("/app0"), std::string(kDataHome)})
+  {
+    const std::string path = dir + "/" + name;
+    if (SwitchPresent(path.c_str()))
+      return path;
+  }
+  return std::string();
+}
+
 int main(int argc, char* argv[])
 {
   // Written straight to klog: visible even if everything after this fails.
@@ -474,45 +498,32 @@ int main(int argc, char* argv[])
   // Everything Kodi creates is made deletable over FTP by OpenUpTree()
   // below (at start) and before exit; umask() itself is a no-op on a title.
 
-  // Switches, created as empty files in the title folder over FTP
-  // (/data/homebrew/<TITLE_ID>/...). Files the title created cannot be
-  // deleted from outside its sandbox (FTP gets "permission denied" whatever
-  // their mode), so the title removes its own data:
-  //   kodi-reset      wipe Kodi's data, then start Kodi fresh
-  //   kodi-uninstall  wipe Kodi's data and quit; afterwards the whole title
-  //                   folder can be deleted over FTP
-  // Kodi's data lives in its save data, /download0/.kodi (see the HOME choice
-  // below); these wipe that, not the read-only /app0 image.
-  auto wipeAllHomes = []() {
-    // Clear .kodi from every place a home can be: the title's save data and
-    // both /data per-version homes (whichever this install actually used).
-    return RemoveTree("/download0/.kodi") + RemoveTree("/data/ps5mc/kodi22/.kodi") +
-           RemoveTree("/data/ps5mc/kodi21/.kodi");
+  // Switches: empty files created over FTP in the title folder or in this
+  // build's /data home (FindSwitch). Files the title created in its save data
+  // cannot be deleted from outside its sandbox, so the title removes its own:
+  //   kodi-reset      wipe this build's Kodi data, then start Kodi fresh
+  //   kodi-uninstall  wipe this build's Kodi data and quit
+  // "This build's" = its save data (/download0/.kodi) and its own /data home.
+  // Never the other Kodi version's home: the two builds keep separate libraries.
+  auto wipeThisBuildsData = []() {
+    return RemoveTree("/download0/.kodi") + RemoveTree(std::string(kDataHome) + "/.kodi");
   };
-  if (SwitchPresent("/app0/kodi-uninstall"))
+  if (const std::string sw = FindSwitch("kodi-uninstall"); !sw.empty())
   {
-    const int n = wipeAllHomes();
-    unlink("/app0/kodi-uninstall");
-    Klogf("[kodi-ps5] kodi-uninstall found: removed %d files and folders of Kodi's data, "
-          "quitting\n", n);
+    const int n = wipeThisBuildsData();
+    unlink(sw.c_str());
+    Klogf("[kodi-ps5] kodi-uninstall (%s): removed %d files and folders of Kodi's data, "
+          "quitting\n", sw.c_str(), n);
     _exit(0);
   }
-  if (SwitchPresent("/app0/kodi-reset"))
+  if (const std::string sw = FindSwitch("kodi-reset"); !sw.empty())
   {
-    const int n = wipeAllHomes();
-    unlink("/app0/kodi-reset");
-    Klogf("[kodi-ps5] kodi-reset found: removed %d files and folders of Kodi's data\n", n);
+    const int n = wipeThisBuildsData();
+    unlink(sw.c_str());
+    Klogf("[kodi-ps5] kodi-reset (%s): removed %d files and folders of Kodi's data\n",
+          sw.c_str(), n);
   }
 
-  // kodi-jitprobe: one-shot diagnostic. Tests whether this title can obtain
-  // executable memory (the prerequisite for an in-process binary-add-on
-  // loader) and logs the verdict over klog, then removes its own switch and
-  // continues starting Kodi normally. See platform/ps5/JitProbe.cpp.
-  if (SwitchPresent("/app0/kodi-jitprobe"))
-  {
-    XBMC_PS5_RunJitProbe();
-    unlink("/app0/kodi-jitprobe");
-  }
 
   // Kodi writes everything under $HOME/.kodi, and the only place a title may
   // write is its own save-data area, /download0 (a private read-write image
@@ -543,11 +554,6 @@ int main(int argc, char* argv[])
     // builds keep separate libraries. Fall back silently to the title's own
     // save data (/download0) when /data is not writable - an older loader, or
     // SM+ not yet up. kodi-home-download0 forces the fallback for testing.
-#if PS5_KODI_MAJOR >= 22
-    const char* kDataHome = "/data/ps5mc/kodi22";
-#else
-    const char* kDataHome = "/data/ps5mc/kodi21";
-#endif
     const bool forceDownload0 = SwitchPresent("/app0/kodi-home-download0");
     if (!forceDownload0 && MakeDirs(kDataHome) && ProbeHome(kDataHome))
     {
@@ -610,83 +616,31 @@ int main(int argc, char* argv[])
           kodiData.c_str());
   setenv("KODI_HOME", "/app0/share/kodi", 0);
 
-  // Directory listing check (Kodi's add-on scan starts with this folder).
-  {
-    const char* path = "/app0/share/kodi/addons";
-    struct stat st;
-    std::memset(&st, 0, sizeof(st));
-    const int sr = stat(path, &st);
-    Klogf("[kodi-ps5] stat %s: %d (errno %d) mode %o nlink %u size %lld\n", path, sr,
-          sr ? errno : 0, static_cast<unsigned>(st.st_mode), static_cast<unsigned>(st.st_nlink),
-          static_cast<long long>(st.st_size));
-    const char* known = "/app0/share/kodi/addons/skin.estuary/addon.xml";
-    const int kr = stat(known, &st);
-    Klogf("[kodi-ps5] stat %s: %d (errno %d) size %lld\n", known, kr, kr ? errno : 0,
-          static_cast<long long>(st.st_size));
-
-    const int fd = open(path, O_RDONLY | O_DIRECTORY);
-    if (fd < 0)
-      Klogf("[kodi-ps5] open dir: errno %d (%s)\n", errno, std::strerror(errno));
-    else
-    {
-      static char buf[64 * 1024];
-      errno = 0;
-      const int n1 = getdents(fd, buf, sizeof(buf));
-      Klogf("[kodi-ps5] getdents -> %d (errno %d %s)\n", n1, n1 < 0 ? errno : 0,
-            n1 < 0 ? std::strerror(errno) : "");
-      if (n1 > 0)
-      {
-        const struct dirent* e = reinterpret_cast<const struct dirent*>(buf);
-        Klogf("[kodi-ps5]   first record: fileno %u reclen %u type %u namlen %u name '%.*s'\n",
-              e->d_fileno, e->d_reclen, e->d_type, e->d_namlen, e->d_namlen, e->d_name);
-      }
-      lseek(fd, 0, SEEK_SET);
-      long base = 0;
-      errno = 0;
-      const int n2 = getdirentries(fd, buf, sizeof(buf), &base);
-      Klogf("[kodi-ps5] getdirentries -> %d (errno %d %s)\n", n2, n2 < 0 ? errno : 0,
-            n2 < 0 ? std::strerror(errno) : "");
-      close(fd);
-    }
-
-    errno = 0;
-    DIR* dir = opendir(path);
-    if (!dir)
-      Klogf("[kodi-ps5] opendir %s: errno %d (%s)\n", path, errno, std::strerror(errno));
-    else
-    {
-      int entries = 0;
-      errno = 0;
-      while (readdir(dir))
-        ++entries;
-      const int err = errno;
-      closedir(dir);
-      Klogf("[kodi-ps5] %s lists %d entries (errno %d)\n", path, entries, err);
-    }
-  }
 
   // Logging goes to kodi.log in $HOME/.kodi/temp and, via the platform sink,
   // to klog. Debug-level logging (slow: every line goes through the kernel)
-  // only with an empty file "kodi-debug" in the title folder.
+  // only with an empty file "kodi-debug" (see FindSwitch for where).
   std::vector<char*> args(argv, argv + argc);
   static char debugFlag[] = "--debug";
 
   // Switches that stay in place (unlike reset/uninstall) are read here, once,
   // and each found switch sets an environment variable that the rest of the
   // port (the hardware decoder) reads.
+  // Looked for in the title folder and in this build's /data home (FindSwitch),
+  // so it also works on a read-only exFAT install.
   static const struct
   {
-    const char* file;
+    const char* name;
     const char* env;
   } kSwitches[] = {
-      {"/app0/kodi-debug", "KODI_PS5_DEBUG"},
+      {"kodi-debug", "KODI_PS5_DEBUG"},
   };
   for (const auto& sw : kSwitches)
   {
-    if (SwitchPresent(sw.file))
+    if (const std::string found = FindSwitch(sw.name); !found.empty())
     {
       setenv(sw.env, "1", 1);
-      Klogf("[kodi-ps5] switch %s found (%s=1)\n", sw.file + 6, sw.env);
+      Klogf("[kodi-ps5] switch %s found (%s=1)\n", found.c_str(), sw.env);
     }
   }
   if (getenv("KODI_PS5_DEBUG"))

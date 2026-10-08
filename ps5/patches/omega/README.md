@@ -6,6 +6,7 @@ apply unchanged; these 8 are the Omega forms, exported from the verified
 
 | patch | why it differs on 21 |
 |---|---|
+| 0033 texturegl-bgra-swizzle | 21 uploads skin textures as `GL_BGRA`, which the PS5 GL driver (no `GL_EXT_bgra`) rejects - images came out black. Uploads `GL_RGBA` with a B<->R texture swizzle instead (free at sample time). 22 rewrote its texture path and needs nothing |
 | 0002 timeutils | Omega inverts the condition (`CLOCK_MONOTONIC_RAW && !ANDROID`); add `&& !TARGET_PS5` |
 | 0013 default-framebuffer-hdr | Omega's FBO has no depth-buffer block; that hunk is dropped |
 | 0016 curl-idle-close | Omega spells `std::unique_lock<CCriticalSection>` (Piers uses CTAD) |
@@ -37,3 +38,11 @@ guarded in the shared platform sources with `PS5_KODI_MAJOR`, which
 `CacheType`/`DIR_CACHE_TYPE` (SMB2Directory.h), `IOControl`/`EIoControl` (SMB2File.h).
 `SetFolder`/`m_bIsFolder` (SMB2Directory.cpp), `SourceType::LOCAL`/`CMediaSource::SOURCE_TYPE_LOCAL` (PS5StorageProvider.cpp), front-to-back GUI rendering + FBO depth buffer (22-only; HdrOutputPS5.cpp, WinSystemPS5GLContext.cpp).
 Sysroot shim: `getdelim`/`getline` in libkodishim (Kodi 21's PosixTimezone.cpp uses getdelim; the title libc lacks it).
+
+Removed in the 2026-10-08 cleanup (do not reintroduce): 0034 (TextureGL upload
+diagnostic) and 0036 (`TranslatePathConvertCase` without case folding). Both
+chased the Kodi 21 missing-icons bug, whose real cause was the texture-bundle
+format: a Kodi 22 TexturePacker writes XBTF version 3, which Kodi 21 cannot
+read. Host tools are now built per Kodi major (`scripts/20-configure-kodi.sh`)
+and the deploy rejects a bundle the target cannot read (`scripts/30-deploy.sh`).
+0035's per-call diagnostic became the shared `kodi/0035` (one error per bundle).
