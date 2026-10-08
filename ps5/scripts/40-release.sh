@@ -63,10 +63,22 @@ for v in "${VARIANTS[@]}"; do
   [ -s "$DIST/eboot.bin" ] || { echo "!! $name: no eboot.bin in $DIST"; exit 1; }
   [ -f "$DIST/share/kodi/python/lib/python3.14/os.py" ] || { echo "!! $name: Python stdlib missing from $DIST"; exit 1; }
   grep -q "\"$tid\"" "$DIST/sce_sys/param.json" || { echo "!! $name: param.json does not carry $tid"; exit 1; }
+  # Checksum manifest INSIDE the title folder, so the install can be verified
+  # after any transfer (FileZilla drag-and-drop silently drops files in deep
+  # trees - this is how skin.estuary/media/Textures.xbt once went missing).
+  ( cd "$DIST" && find . -type f ! -name MANIFEST.sha256 -print0 | sort -z       | xargs -0 sha256sum > MANIFEST.sha256 )
+  echo "==> $name: MANIFEST.sha256 lists $(wc -l < "$DIST/MANIFEST.sha256") files"
   ZIP="$OUT/PS5MC-$VER-$name-$tid.zip"
   rm -f "$ZIP"; ( cd "$sdir/app/dist" && zip -qr "$ZIP" "$tid" )
   echo "==> $name: $(basename "$ZIP") ($(stat -c%s "$ZIP") bytes, eboot $(stat -c%s "$DIST/eboot.bin") bytes)"
   built+=("$ZIP")
+  # Raw exFAT image: a single-file install that cannot partially-drop files over
+  # FTP (the folder's many files can). The format BlackBearReloaded ship, as it
+  # avoids the PFSC mounting corruption seen on fw 13.60. Zip + exFAT are the
+  # only release assets.
+  if [ "${NO_EXFAT:-0}" != 1 ]; then
+    PY=$(REPO_ROOT="$FORK/ps5" bash "$SCRIPTS/lib/mkpfs-setup.sh" 2>"$OUT/$name-exfat.log")       && "$PY" "$SCRIPTS/lib/pack-exfat.py" "$DIST" "$sdir/app/dist/$tid.exfat" >>"$OUT/$name-exfat.log" 2>&1       && { EXF="$OUT/PS5MC-$VER-$name-$tid.exfat"; cp "$sdir/app/dist/$tid.exfat" "$EXF";            echo "==> $name: $(basename "$EXF") ($(stat -c%s "$EXF") bytes)"; built+=("$EXF"); }       || { echo "!! $name: .exfat packing failed - see $OUT/$name-exfat.log"; tail -3 "$OUT/$name-exfat.log";            [ -z "$ONLY" ] && { echo "!! not publishing without both assets"; exit 1; }; }
+  fi
   git -C "$FORK" checkout -q -- xbmc/platform/ps5/BuildStamp.h 2>/dev/null || true
 done
 git checkout -q "$START_BRANCH"
