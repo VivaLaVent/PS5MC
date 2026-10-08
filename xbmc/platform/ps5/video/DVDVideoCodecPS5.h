@@ -137,6 +137,17 @@ private:
   // Annex-B filter needs extradata to run, so convert here; the parameter sets
   // are then in-band. Returns false (out untouched) for Annex-B input.
   bool ToAnnexB(const uint8_t* data, size_t size, std::vector<uint8_t>& out) const;
+  // A stream that carries its OWN parameter sets in-band, differing from the
+  // container's (extradata) copy, gets the container copies removed per type,
+  // so the stream's own are what the decoder uses - as FFmpeg does. Returns
+  // false (out untouched) when the access unit has no such in-band set.
+  bool DropInjectedParameterSets(const uint8_t* data, size_t size, std::vector<uint8_t>& out);
+  // HEVC coded in tiles (tiles_enabled_flag in a PPS): the PS5's decoder does
+  // not support them (a hardware finding reported by the unofficial Stremio
+  // PS5 port and by EVO/Nuvio). Checked on the container's parameter sets so
+  // Open() can hand the stream to FFmpeg up front.
+  bool ParameterSetsUseTiles() const;
+  bool m_loggedInbandSets = false;
   std::vector<uint8_t> m_annexB;
   bool m_loggedLengthPrefixed = false;
   unsigned m_cleanNoSlice = 0;  // stage 1: access units with nothing decodable in them
