@@ -219,13 +219,12 @@ if [ ! -x "$HOSTTOOLS/bin/TexturePacker" ] || [ ! -x "$HOSTTOOLS/bin/JsonSchemaB
   KODI_SRC="$KODI_SRC" NATIVE="$NATIVE" PREFIX="$HOSTTOOLS" bash "$HERE/scripts/10-build-host-tools.sh" \
     > "$HOSTTOOLS/build.log" 2>&1 || { echo "!! host tools failed - see $HOSTTOOLS/build.log"; tail -15 "$HOSTTOOLS/build.log"; exit 1; }
   echo "$HOSTTOOLS_REV" > "$HOSTTOOLS/.source-rev"
-  # texture bundles packed by another TexturePacker must be packed again
-  find "$BUILD" -name '*.xbt' -delete 2>/dev/null || true
 fi
 echo "==> host tools: $HOSTTOOLS/bin (Kodi $KODI_MAJOR)"
 
 cmake -S "$KODI_SRC" -B "$BUILD" -G Ninja \
   -U "FFMPEG_*" -U "Python3_*" -U "PYTHON_*" \
+  -U TEXTUREPACKER_EXECUTABLE -U JSONSCHEMABUILDER_EXECUTABLE \
   -DCMAKE_TOOLCHAIN_FILE="$HERE/toolchain/ps5-kodi.cmake" \
   -DCMAKE_BUILD_TYPE="${BUILD_TYPE:-Release}" \
   -DCMAKE_C_FLAGS_RELEASE="-O2 -g -DNDEBUG" \
@@ -242,6 +241,26 @@ cmake -S "$KODI_SRC" -B "$BUILD" -G Ninja \
   -DENABLE_TESTING=OFF \
   -DVERBOSE_FIND=ON \
   "$@"
+
+# find_program() caches its result: without the -U above, a build dir that was
+# once configured with another TexturePacker silently keeps using it (that is
+# how the Kodi 21 build kept packing its skin in Kodi 22's format). Verify what
+# CMake actually resolved, and fail here rather than ship an unreadable skin.
+for tool in TEXTUREPACKER JSONSCHEMABUILDER; do
+  got="$(sed -n "s/^${tool}_EXECUTABLE:[A-Z]*=//p" "$BUILD/CMakeCache.txt")"
+  case "$got" in
+    "$HOSTTOOLS"/bin/*) ;;
+    *) echo "!! CMake resolved ${tool}_EXECUTABLE to '${got:-nothing}', not $HOSTTOOLS/bin"; exit 1 ;;
+  esac
+done
+# Texture bundles in this build dir must come from this exact tool build:
+# repack when the tool (or its sources) changed since the last configure.
+if [ "$(cat "$BUILD/.hosttools" 2>/dev/null)" != "$HOSTTOOLS:$HOSTTOOLS_REV" ]; then
+  n="$(find "$BUILD" -name '*.xbt' | wc -l)"
+  find "$BUILD" -name '*.xbt' -delete
+  echo "$HOSTTOOLS:$HOSTTOOLS_REV" > "$BUILD/.hosttools"
+  echo "==> host tools changed for this build dir: $n texture bundle(s) will be repacked"
+fi
 
 cat <<MSG
 

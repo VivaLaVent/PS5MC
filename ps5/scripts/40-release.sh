@@ -68,9 +68,15 @@ for v in "${VARIANTS[@]}"; do
   # contentVersion for the store: 01.000.0NN from the numeric release version
   # (1.2 -> 01.000.012, 1.11 -> 01.000.011... keep tags <= x.99). Rises per tag.
   CVER=$(printf '01.000.0%02d' "$(printf '%s' "$VER" | awk -F. '{printf (($1*10)+$2)%100}')")
-  KODI_SRC="$FORK" BUILD="$bdir" STAGE="$sdir" TITLE_ID="$tid" TITLE_NAME="$tname" CONTENT_VERSION="$CVER" \
-    bash "$SCRIPTS/30-deploy.sh" > "$OUT/$name-deploy.log" 2>&1
-  grep -q 'Build complete' "$OUT/$name-deploy.log" || { echo "!! $name: deploy/package failed - see $OUT/$name-deploy.log"; grep '!!' "$OUT/$name-deploy.log"; exit 1; }
+  # The deploy's exit status decides: its checks (e.g. the texture-bundle
+  # version check) run AFTER the eboot step has printed "Build complete".
+  if ! KODI_SRC="$FORK" BUILD="$bdir" STAGE="$sdir" TITLE_ID="$tid" TITLE_NAME="$tname" CONTENT_VERSION="$CVER" \
+       bash "$SCRIPTS/30-deploy.sh" > "$OUT/$name-deploy.log" 2>&1 ||
+     ! grep -q 'Build complete' "$OUT/$name-deploy.log"; then
+    echo "!! $name: deploy/package failed (full log: $OUT/$name-deploy.log):"
+    grep '!!' "$OUT/$name-deploy.log" | head -15 | sed 's/^/!!   /'
+    exit 1
+  fi
   grep -E 'texture bundles:' "$OUT/$name-deploy.log" | sed "s/^ */==> $name: /"
   DIST="$sdir/app/dist/$tid"
   # verify the artifact before zipping: eboot present, Python stdlib present, title id in param.json
