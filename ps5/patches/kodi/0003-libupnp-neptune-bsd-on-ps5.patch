@@ -1,4 +1,5 @@
-Neptune: ps5 uses the BSD resolver/sockets and getaddrinfo like freebsd.
+Neptune: ps5 uses BSD sockets and getaddrinfo; enumerate interfaces with
+getifaddrs because the title sandbox denies SIOCGIFCONF.
 
 --- a/lib/libUPnP/CMakeLists.txt	2026-09-25 15:14:44.701927042 +0000
 +++ b/lib/libUPnP/CMakeLists.txt	2026-09-25 15:14:44.706092709 +0000
@@ -11,12 +12,17 @@ Neptune: ps5 uses the BSD resolver/sockets and getaddrinfo like freebsd.
    list(APPEND SOURCES Neptune/Source/System/Bsd/NptBsdResolver.cpp
                        Neptune/Source/System/Bsd/NptBsdSockets.cpp)
  endif()
-@@ -104,7 +104,7 @@
+@@ -104,8 +104,12 @@
  
  add_library(upnp STATIC ${SOURCES} ${HEADERS})
  target_compile_definitions(upnp PUBLIC -DNPT_CONFIG_ENABLE_LOGGING)
 -if(CORE_SYSTEM_NAME STREQUAL "freebsd")
 +if(CORE_SYSTEM_NAME STREQUAL "freebsd" OR CORE_SYSTEM_NAME STREQUAL "ps5")
    target_compile_definitions(upnp PUBLIC -DNPT_CONFIG_HAVE_GETADDRINFO)
++endif()
++
++if(CORE_SYSTEM_NAME STREQUAL "ps5")
++  target_compile_definitions(upnp PRIVATE -DNPT_CONFIG_HAVE_GETIFADDRS)
  endif()
  
+ set(INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}

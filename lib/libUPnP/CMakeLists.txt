@@ -108,6 +108,10 @@ if(CORE_SYSTEM_NAME STREQUAL "freebsd" OR CORE_SYSTEM_NAME STREQUAL "ps5")
   target_compile_definitions(upnp PUBLIC -DNPT_CONFIG_HAVE_GETADDRINFO)
 endif()
 
+if(CORE_SYSTEM_NAME STREQUAL "ps5")
+  target_compile_definitions(upnp PRIVATE -DNPT_CONFIG_HAVE_GETIFADDRS)
+endif()
+
 set(INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}
                         Platinum/Source/Core
                         Platinum/Source/Platinum
