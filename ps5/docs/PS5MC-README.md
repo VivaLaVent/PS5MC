@@ -132,9 +132,8 @@ updates leave alone; `kodi-reset` clears it (see *Switches*).
   pictures after every seek on this hardware, so depth 1 stays.
 - **Fixed 24/25/50 Hz output:** the PS5 refuses explicit refresh rates from
   titles, so without VRR everything plays at 59.94 Hz.
-- **Dolby/DTS passthrough** (including TrueHD and DTS-HD at 8 channels and
-  192 kHz): offered to Kodi's *Allow passthrough*, but not yet confirmed to
-  reach a receiver intact.
+- **DTS-HD Master Audio passthrough:** the PS5 has no known route for its
+  8-channel high-bit-rate stream, so Kodi sends the DTS core instead.
 - **DualSense as a game controller** (joystick add-on).
 - **The Media tab:** Kodi is a Games title (the GL driver fails in the Media
   category's sandbox).
@@ -200,11 +199,18 @@ surround tracks; Kodi's default of 2.0 downmixes them (without the LFE). Kodi
 opens an 8-channel port in the console's channel order (FL FR FC LFE BL BR SL
 SR); the PS5 downmixes further to what the display or receiver takes.
 
-Dolby Digital, Dolby Digital Plus and DTS **passthrough** is offered to Kodi's
-*Allow passthrough* setting (off by default) as IEC 61937 inside PCM. It needs
-the PS5's *Audio Format (Priority)* at **Linear PCM** and a bit-exact path; try
-it at low volume first, because a receiver that does not recognise the packets
-plays them as noise.
+**Passthrough** sends Dolby Digital, Dolby Digital Plus (including Atmos),
+DTS and Dolby TrueHD to a soundbar or AV receiver untouched over HDMI, the way
+the PS5's own media apps do: Kodi packs the audio as IEC 61937 bursts and the
+console switches HDMI to that bitstream while it plays (other sound from Kodi
+is muted meanwhile). Turn on *Settings > System > Audio > Allow passthrough*,
+then the formats your receiver decodes; only formats the receiver lists over
+HDMI are offered. DTS-HD (*DTS-HD capable receiver*) is experimental; DTS-HD
+Master Audio sends its DTS core. Based on sainsaji's research
+([PS5-Audio-Passthrough-Research](https://github.com/sainsaji/PS5-Audio-Passthrough-Research)).
+If a receiver stays on the previous format after many format changes, restart
+the receiver. The receiver's decoding adds delay: adjust Kodi's audio offset
+if lips and sound drift apart.
 
 ### Switches
 
@@ -272,6 +278,23 @@ cmake --build ~/kodi-ps5-build -j$(nproc)
 bash scripts/30-deploy.sh                # -> ~/kodi-ps5-stage/app/dist/PPSA99420/
 ```
 
+**Keeping up with upstream.** The PS5 work is one series of commits on top of
+upstream Kodi (`Piers` = 22, `Omega` = 21), rebased onto newer upstream
+rather than merged (docs/FORK-PLAN.md). In the fork clone:
+
+```bash
+bash ps5/scripts/50-upstream-update.sh            # what upstream added, files both sides change, trial rebase
+bash ps5/scripts/50-upstream-update.sh --apply    # rebase the branches that rebase cleanly (old head tagged first)
+ONLY=22 ONTO=22.0-Piers bash ps5/scripts/50-upstream-update.sh --apply   # onto a release tag
+```
+
+Nothing is changed without `--apply`, and a branch that would conflict is
+left alone, with the file and our commit named. The GL driver (ps5-opengl) is
+pinned in `patches/ps5-opengl/PS5-OPENGL-COMMIT` with Kodi's additions on top;
+`bash scripts/51-try-ps5-opengl.sh [revision]` builds a newer one side by side
+(its own source and `/opt/ps5-opengl-gl46-try`) without touching the working
+driver, after checking that every addition still finds its place.
+
 The overlay is copied with a content check, the patch folder must match
 `patches/kodi/manifest.txt` (a release zip extracted over an older checkout
 never deletes files), and packaging refuses stale builds.
@@ -315,7 +338,7 @@ title/sce_sys/                  Kodi's icon
 | HDR output | for PQ video the scanout buffers switch to the platform's HDR 10-bit format in place (`sceVideoOutSubmitChangeBufferAttribute2`); Kodi renders into a 10-bit target that a final pass packs into the 8-bit framebuffer; the GUI is composited in PQ with Kodi's own compositing path |
 | Display timing | the system rate (59.94 Hz) always; on the PS5's VRR link Kodi paces presentation, at the video's VRR rate during playback |
 | A/V sync | Kodi's own model, unchanged: audio is the master clock, tied to the audio hardware by the sink's blocking writes and its delay report (the playing block's remaining time plus what is assembled); video is scheduled against that clock and late frames are dropped by Kodi's render manager. Hardware pictures are stamped in display order with a bounded timestamp set (a picture the decoder skips cannot leave video permanently behind). On the paced VRR link the window system reports the presentation latency (one period, plus each frame's wait for its tick) so Kodi schedules against the moment a frame actually reaches the screen. Zero-copy and copying pictures, hardware and software decoding, all take the same path |
-| Audio | `AESinkPS5`: 48 kHz, 2 or 8 channels on the system audio port; the blocking write is the clock. Passthrough = IEC 61937 in 16-bit stereo PCM at 48/192 kHz |
+| Audio | `AESinkPS5`: 48 kHz, 2 or 8 channels on the system audio port; the blocking write is the clock. Passthrough = Kodi's IEC 61937 bursts on HDMI bitstream ports (Ex modes 0/2/3/4, Sys mode 5 for TrueHD) |
 | Input | `PS5PadInput`: DualSense polled at 125 Hz, mapped to Kodi keyboard events |
 | Network sources | `smb://` on libsmb2, NFS on libnfs, UPnP |
 | Logging | every log line goes to klog (`PS5InterfaceForCLog`) as well as `kodi.log` |
@@ -406,8 +429,8 @@ sed -n "$((N+1)),$((N+40))p" kodi-klog.txt | grep -a -o "^# [0-9a-f]\{16\}" | aw
    (`kodi-debug` logs presented frames, pacing and render time every 5 s).
 5. GL driver: cheaper clears and draws at 4K, runtime-selected render size.
 6. A DualSense joystick driver.
-7. Passthrough confirmation: whether the PS5 passes IEC 61937 PCM through
-   bit-exactly (2 channels first, then the 8-channel HBR formats).
+7. Passthrough: confirm DTS-HD and the receiver's TrueHD/Atmos labels; find a
+   route for DTS-HD Master Audio.
 
 ## Comparison with upstream
 

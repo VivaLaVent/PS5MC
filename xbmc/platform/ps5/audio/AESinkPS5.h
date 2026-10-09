@@ -9,7 +9,9 @@
 #pragma once
 
 #include "cores/AudioEngine/Interfaces/AESink.h"
+#include "cores/AudioEngine/Utils/AEBitstreamPacker.h"
 #include "cores/AudioEngine/Utils/AEDeviceInfo.h"
+#include "cores/AudioEngine/Utils/AEStreamInfo.h"
 
 #include <cstdint>
 #include <memory>
@@ -50,16 +52,23 @@ public:
 private:
   bool Output(const uint8_t* block);
   bool OpenPort(AEAudioFormat& format, bool eight);
-  bool OpenPassthroughPort(AEAudioFormat& format);
+  // HDMI bitstream (passthrough): Dolby/DTS sent to the receiver untouched
+  bool OpenBitstreamPort(AEAudioFormat& format);
+  void CloseBitstreamPort();
+  void WritePause(unsigned int millis); // IEC 61937 pause bursts (receiver settle time)
 
-  static constexpr unsigned int GRAIN_FRAMES = 1024; // ~21.3 ms at 48 kHz
+  static constexpr unsigned int PCM_GRAIN_FRAMES = 1024; // ~21.3 ms at 48 kHz
   static constexpr unsigned int QUEUE_DEPTH = 2; // blocks the port holds
 
   int32_t m_handle{-1};
   unsigned int m_channels{2};
-  unsigned int m_sampleRate{48000}; // 192000 for E-AC3 passthrough
+  unsigned int m_sampleRate{48000}; // the rate the port consumes frames at
   unsigned int m_frameSize{0};
-  bool m_hbrSwap{false}; // 8-channel passthrough: words 2 and 3 swapped (FC/LFE slots)
+  unsigned int m_grainFrames{PCM_GRAIN_FRAMES}; // frames per sceAudioOutOutput
+  bool m_bitstream{false}; // the port is an HDMI bitstream port
+  bool m_bitstreamSys{false}; // ... opened with the Sys functions (TrueHD)
+  CAEStreamInfo m_streamInfo; // the bitstream's format, for pause bursts
+  CAEBitstreamPacker m_pausePacker;
   std::vector<uint8_t> m_block; // one grain being assembled
   unsigned int m_blockFrames{0}; // frames currently in m_block
   std::chrono::steady_clock::time_point m_blockStarted{}; // when the playing block began
