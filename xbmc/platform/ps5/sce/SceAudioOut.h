@@ -35,6 +35,26 @@ extern "C"
   // flag: one bit per channel (L, R, C, LFE, LS, RS, LE, RE); vol: 8 entries
   int32_t sceAudioOutSetVolume(int32_t handle, int32_t flag, int32_t* vol);
   int32_t sceAudioOutClose(int32_t handle);
+
+  // HDMI bitstream output (audio passthrough). Not in the SDK headers, but the
+  // payload SDK's libSceAudioOut stub exports them; they must be linked, not
+  // looked up (sceKernelDlsym is refused in the title sandbox). Found and
+  // verified on hardware by sainsaji: github.com/sainsaji/PS5-Audio-Passthrough-Research
+  // (GPL-3.0; only the documented calls and constants are used here).
+  //   Ex*: Dolby Digital, DTS, Dolby Digital Plus, DTS-HD (the citroncore path)
+  //   Sys*: Dolby TrueHD as MAT (the Blu-ray player's path)
+  int32_t sceAudioOutExOpen(int32_t userId, int32_t mode); // S16 stereo port
+  int32_t sceAudioOutExClose(int32_t handle);
+  // zero must be 0; target 1 is what Sony's own player passes
+  int32_t sceAudioOutExConfigureOutput(int32_t zero, uint32_t flags, int32_t mode,
+                                       int32_t target, uint64_t option);
+  int32_t sceAudioOutSysOpen(int32_t userId, int32_t mode); // mode 5: S16 8-channel
+  int32_t sceAudioOutSysClose(int32_t handle);
+  // type 1 = HDMI
+  int32_t sceAudioOutSysConfigureOutput(int32_t type, uint32_t flags, int32_t mode,
+                                        int32_t target, uint64_t option);
+  // type 1 = HDMI; size must be AUDIO_OUT_HDMI_MONITOR_INFO_SIZE
+  int32_t sceAudioOutSysGetHdmiMonitorInfo(int32_t type, void* info, uint32_t size);
 }
 
 namespace KODI::PLATFORM::PS5
@@ -59,5 +79,16 @@ constexpr uint32_t AUDIO_OUT_SAMPLE_RATE = 48000;
 constexpr uint32_t AUDIO_OUT_SAMPLE_RATE_HIGH = 192000;
 constexpr int32_t AUDIO_OUT_VOLUME_0DB = 0x8000;
 constexpr int32_t AUDIO_OUT_VOLUME_ALL_CHANNELS = 0xff;
+
+// HDMI bitstream output
+constexpr int32_t AUDIO_OUT_HDMI = 1;                // Sys* "type", HDMI monitor info
+constexpr int32_t AUDIO_OUT_BITSTREAM_TARGET = 1;    // what Sony's own player passes
+constexpr int32_t AUDIO_OUT_MODE_DEFAULT = 0xFF;     // back to normal (PCM) output
+constexpr uint32_t AUDIO_OUT_HDMI_MONITOR_INFO_SIZE = 0x180;
+// in the monitor info: number of short audio descriptors (32-bit), then the
+// 8-byte descriptors {CEA-861 coding type, channels, rate mask, ...}
+constexpr uint32_t AUDIO_OUT_HDMI_SAD_COUNT_OFFSET = 0x94;
+constexpr uint32_t AUDIO_OUT_HDMI_SAD_OFFSET = 0x98;
+constexpr uint32_t AUDIO_OUT_HDMI_NAME_OFFSET = 0x0B;
 
 } // namespace KODI::PLATFORM::PS5
