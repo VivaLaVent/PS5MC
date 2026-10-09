@@ -7,6 +7,8 @@
  */
 #include "FilesystemInstaller.h"
 
+#include "Util.h"
+
 #include "FileItem.h"
 #include "FileItemList.h"
 #include "filesystem/Directory.h"
@@ -16,6 +18,8 @@
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
+
+#include <chrono>
 
 using namespace XFILE;
 
@@ -62,6 +66,9 @@ bool CFilesystemInstaller::InstallToFilesystem(const std::string& archive,
   const std::string oldAddonData =
       URIUtils::AddFileToFolder(m_tempFolder, StringUtils::CreateUUID());
 
+  // PS5: add-on installs take tens of seconds while downloads are fast; time the
+  // file steps (logged below) to find out whether it is per file or per byte
+  [[maybe_unused]] const auto started = std::chrono::steady_clock::now();
   if (!CDirectory::Create(newAddonData))
     return false;
 
@@ -71,6 +78,7 @@ bool CFilesystemInstaller::InstallToFilesystem(const std::string& archive,
     return false;
   }
 
+  [[maybe_unused]] const auto unpacked = std::chrono::steady_clock::now();
   const bool hasOldData = CDirectory::Exists(addonFolder);
   if (hasOldData && !CFile::Rename(addonFolder, oldAddonData))
   {
@@ -85,11 +93,29 @@ bool CFilesystemInstaller::InstallToFilesystem(const std::string& archive,
               addonFolder);
     return false;
   }
+  [[maybe_unused]] const auto moved = std::chrono::steady_clock::now();
 
   if (hasOldData && !CDirectory::RemoveRecursive(oldAddonData))
   {
     CLog::Log(LOGWARNING, "Failed to delete old addon files in '{}'", oldAddonData);
   }
+#if defined(TARGET_PS5)
+  {
+    const auto done = std::chrono::steady_clock::now();
+    auto ms = [](auto from, auto to)
+    { return std::chrono::duration_cast<std::chrono::milliseconds>(to - from).count(); };
+    CFileItemList files;
+    CUtil::GetRecursiveListing(addonFolder, files, "", DIR_FLAG_NO_FILE_DIRS);
+    int64_t bytes = 0;
+    for (int i = 0; i < files.Size(); ++i)
+      bytes += files[i]->GetSize();
+    CLog::Log(LOGINFO,
+              "CFilesystemInstaller[{}]: {} files, {} KiB: unpacked in {} ms, moved in {} ms, "
+              "old version removed in {} ms",
+              addonId, files.Size(), bytes / 1024, ms(started, unpacked), ms(unpacked, moved),
+              ms(moved, done));
+  }
+#endif
   return true;
 }
 

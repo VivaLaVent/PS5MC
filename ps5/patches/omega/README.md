@@ -7,6 +7,7 @@ apply unchanged; these 8 are the Omega forms, exported from the verified
 | patch | why it differs on 21 |
 |---|---|
 | 0033 texturegl-bgra-swizzle | 21 uploads skin textures as `GL_BGRA`, which the PS5 GL driver (no `GL_EXT_bgra`) rejects - images came out black. Uploads `GL_RGBA` with a B<->R texture swizzle instead (free at sample time). 22 rewrote its texture path and needs nothing |
+| 0037 addon-install-timing | Same timing as `kodi/0037`; 21's `CFileItem` has no `GetSize()`, so the size is read from `m_dwSize` |
 | 0002 timeutils | Omega inverts the condition (`CLOCK_MONOTONIC_RAW && !ANDROID`); add `&& !TARGET_PS5` |
 | 0013 default-framebuffer-hdr | Omega's FBO has no depth-buffer block; that hunk is dropped |
 | 0016 curl-idle-close | Omega spells `std::unique_lock<CCriticalSection>` (Piers uses CTAD) |
