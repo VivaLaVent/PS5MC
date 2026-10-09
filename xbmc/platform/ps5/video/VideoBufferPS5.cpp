@@ -62,6 +62,16 @@ void CVideoBufferPS5::ReturnFrame()
   m_data = nullptr;
 }
 
+uint64_t CVideoBufferPS5::DecoderInstance() const
+{
+  return m_decoder ? m_decoder->Instance() : 0;
+}
+
+bool CVideoBufferPS5::HoldsLastDecoderReference() const
+{
+  return m_decoder && m_decoder.use_count() == 1;
+}
+
 void CVideoBufferPS5::GetPlanes(uint8_t* (&planes)[YuvImage::MAX_PLANES])
 {
   planes[0] = const_cast<uint8_t*>(m_data);

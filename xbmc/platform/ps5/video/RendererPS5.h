@@ -33,6 +33,7 @@ public:
   static void Register();
 
   bool Configure(const VideoPicture& picture, float fps, unsigned int orientation) override;
+  void UnInit() override;
   void ReleaseBuffer(int idx) override;
   bool NeedBuffer(int idx) override;
 
@@ -53,8 +54,11 @@ private:
     void* lumaImage = nullptr;
     void* chromaImage = nullptr;
   };
-  // a frame's memory never moves: its textures are made once and reused
-  using FrameKey = std::tuple<const void*, unsigned, unsigned, unsigned>; // data, pitch, rows, bits
+  // A frame's memory never moves while its decoder lives: its textures are
+  // made once and reused. The decoder instance is part of the key because a
+  // later decoder can get memory at the same address - textures made over
+  // the old (freed) memory must never be used for it.
+  using FrameKey = std::tuple<uint64_t, const void*, unsigned, unsigned, unsigned>; // decoder, data, pitch, rows, bits
   std::map<FrameKey, FrameTextures> m_frames;
   GLsync m_fences[NUM_BUFFERS] = {};
   using ImageTargetTexture2D = void (*)(GLenum target, void* image);
@@ -62,5 +66,8 @@ private:
   bool m_failureLogged = false;
   const bool m_debug = std::getenv("KODI_PS5_DEBUG") != nullptr; // per-buffer texture log
 
-  void DeleteFrames();
+  // the textures and images over decoder memory: all, or one decoder's
+  void DeleteFrames(uint64_t decoder = 0);
+  bool HasFrames(uint64_t decoder) const;
+  bool m_fenceTimeoutLogged = false;
 };
