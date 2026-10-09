@@ -10,7 +10,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="${WORK:-$HOME/ps5-work}"
-SRC="$WORK/ps5-opengl"
+SRC="${PS5_OPENGL_SRC:-$WORK/ps5-opengl}" # 51-try-ps5-opengl.sh builds another revision side by side
 export PS5_PAYLOAD_SDK="${PS5_PAYLOAD_SDK:-/opt/ps5-payload-sdk}"
 export PS5_OPENGL_PREFIX="${PS5_OPENGL_PREFIX:-/opt/ps5-opengl-gl46}"
 
