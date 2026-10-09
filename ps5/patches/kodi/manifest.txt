@@ -19,3 +19,4 @@
 0019-curl-multi-wait-ps5.patch
 0032-imagefactory-ffmpeg-on-ps5.patch
 0035-xbt-openbundle-log-failure.patch
+0037-addon-install-timing-ps5.patch

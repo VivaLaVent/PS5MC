@@ -1,0 +1,149 @@
+ps5: time add-on installs, to find where the tens of seconds go (downloads
+are fast). One summary line per install job - download/verify, unload,
+install (dependencies + files), reload, post-install - and one for the file
+steps: files and KiB, unpack, move, removal of the old version. Logged at
+INFO on the PS5 only; nothing else changes. Kodi 22 form (Kodi 21: omega/, the same
+except for the file size accessor).
+
+diff --git a/xbmc/addons/AddonInstaller.cpp b/xbmc/addons/AddonInstaller.cpp
+index 6cdef9d3c8..4be03dc24c 100644
+--- a/xbmc/addons/AddonInstaller.cpp
++++ b/xbmc/addons/AddonInstaller.cpp
+@@ -46,6 +46,7 @@
+ #include "utils/XTimeUtils.h"
+ #include "utils/log.h"
+ 
++#include <chrono>
+ #include <functional>
+ #include <memory>
+ #include <mutex>
+@@ -697,6 +698,19 @@ bool CAddonInstallJob::DoWork()
+       CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(24057), m_addon->Name()));
+   SetProgress(0);
+ 
++  // PS5: timing of each phase (logged at the end): add-on installs are slow
++  [[maybe_unused]] const auto jobStarted = std::chrono::steady_clock::now();
++  auto phaseStarted = jobStarted;
++  std::string phaseTimes;
++  auto markPhase = [&phaseStarted, &phaseTimes](const char* phase)
++  {
++    const auto now = std::chrono::steady_clock::now();
++    phaseTimes += StringUtils::Format(
++        "{}{} {} ms", phaseTimes.empty() ? "" : ", ", phase,
++        std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStarted).count());
++    phaseStarted = now;
++  };
++
+   // check whether all the dependencies are available or not
+   SetText(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(24058));
+   std::pair<std::string, std::string> failedDep;
+@@ -825,6 +839,7 @@ bool CAddonInstallJob::DoWork()
+   m_currentType = CAddonInstallJob::TYPE_INSTALL;
+ 
+   // run any pre-install functions
++  markPhase("download/verify");
+   ADDON::OnPreInstall(m_addon);
+ 
+   if (!CServiceBroker::GetAddonMgr().UnloadAddon(m_addon->ID()))
+@@ -836,6 +851,7 @@ bool CAddonInstallJob::DoWork()
+   // perform install
+   if (!Install(installFrom, m_repo))
+     return false;
++  markPhase("install (dependencies + files)");
+ 
+   // Load new installed and if succeeded replace defined m_addon here with new one
+   if (!CServiceBroker::GetAddonMgr().LoadAddon(m_addon->ID(), m_addon->Origin(),
+@@ -845,6 +861,7 @@ bool CAddonInstallJob::DoWork()
+     CLog::Log(LOGERROR, "CAddonInstallJob[{}]: failed to reload addon", m_addon->ID());
+     return false;
+   }
++  markPhase("reload");
+ 
+   CServiceBroker::GetResourcesComponent().GetLocalizeStrings().LoadAddonStrings(
+       URIUtils::AddFileToFolder(m_addon->Path(), "resources/language/"),
+@@ -1002,6 +1019,15 @@ bool CAddonInstallJob::DoWork()
+       eventLog->Add(std::make_shared<const CAddonManagementEvent>(m_addon, text), true, false);
+   }
+ 
++  markPhase("post-install");
++#if defined(TARGET_PS5)
++  CLog::Log(LOGINFO, "CAddonInstallJob[{}]: installed in {} ms: {}", m_addon->ID(),
++            std::chrono::duration_cast<std::chrono::milliseconds>(
++                std::chrono::steady_clock::now() - jobStarted)
++                .count(),
++            phaseTimes);
++#endif
++
+   // and we're done!
+   MarkFinished();
+   return true;
+diff --git a/xbmc/addons/FilesystemInstaller.cpp b/xbmc/addons/FilesystemInstaller.cpp
+index e3a61d2b2c..b00a1e7fac 100644
+--- a/xbmc/addons/FilesystemInstaller.cpp
++++ b/xbmc/addons/FilesystemInstaller.cpp
+@@ -7,6 +7,8 @@
+  */
+ #include "FilesystemInstaller.h"
+ 
++#include "Util.h"
++
+ #include "FileItem.h"
+ #include "FileItemList.h"
+ #include "filesystem/Directory.h"
+@@ -17,6 +19,8 @@
+ #include "utils/URIUtils.h"
+ #include "utils/log.h"
+ 
++#include <chrono>
++
+ using namespace XFILE;
+ 
+ namespace
+@@ -62,6 +66,9 @@ bool CFilesystemInstaller::InstallToFilesystem(const std::string& archive,
+   const std::string oldAddonData =
+       URIUtils::AddFileToFolder(m_tempFolder, StringUtils::CreateUUID());
+ 
++  // PS5: add-on installs take tens of seconds while downloads are fast; time the
++  // file steps (logged below) to find out whether it is per file or per byte
++  [[maybe_unused]] const auto started = std::chrono::steady_clock::now();
+   if (!CDirectory::Create(newAddonData))
+     return false;
+ 
+@@ -71,6 +78,7 @@ bool CFilesystemInstaller::InstallToFilesystem(const std::string& archive,
+     return false;
+   }
+ 
++  [[maybe_unused]] const auto unpacked = std::chrono::steady_clock::now();
+   const bool hasOldData = CDirectory::Exists(addonFolder);
+   if (hasOldData && !CFile::Rename(addonFolder, oldAddonData))
+   {
+@@ -85,11 +93,29 @@ bool CFilesystemInstaller::InstallToFilesystem(const std::string& archive,
+               addonFolder);
+     return false;
+   }
++  [[maybe_unused]] const auto moved = std::chrono::steady_clock::now();
+ 
+   if (hasOldData && !CDirectory::RemoveRecursive(oldAddonData))
+   {
+     CLog::Log(LOGWARNING, "Failed to delete old addon files in '{}'", oldAddonData);
+   }
++#if defined(TARGET_PS5)
++  {
++    const auto done = std::chrono::steady_clock::now();
++    auto ms = [](auto from, auto to)
++    { return std::chrono::duration_cast<std::chrono::milliseconds>(to - from).count(); };
++    CFileItemList files;
++    CUtil::GetRecursiveListing(addonFolder, files, "", DIR_FLAG_NO_FILE_DIRS);
++    int64_t bytes = 0;
++    for (int i = 0; i < files.Size(); ++i)
++      bytes += files[i]->GetSize();
++    CLog::Log(LOGINFO,
++              "CFilesystemInstaller[{}]: {} files, {} KiB: unpacked in {} ms, moved in {} ms, "
++              "old version removed in {} ms",
++              addonId, files.Size(), bytes / 1024, ms(started, unpacked), ms(unpacked, moved),
++              ms(moved, done));
++  }
++#endif
+   return true;
+ }
+ 

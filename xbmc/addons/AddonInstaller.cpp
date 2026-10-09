@@ -45,6 +45,7 @@
 #include "utils/XTimeUtils.h"
 #include "utils/log.h"
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -665,6 +666,19 @@ bool CAddonInstallJob::DoWork()
   SetTitle(StringUtils::Format(g_localizeStrings.Get(24057), m_addon->Name()));
   SetProgress(0);
 
+  // PS5: timing of each phase (logged at the end): add-on installs are slow
+  [[maybe_unused]] const auto jobStarted = std::chrono::steady_clock::now();
+  auto phaseStarted = jobStarted;
+  std::string phaseTimes;
+  auto markPhase = [&phaseStarted, &phaseTimes](const char* phase)
+  {
+    const auto now = std::chrono::steady_clock::now();
+    phaseTimes += StringUtils::Format(
+        "{}{} {} ms", phaseTimes.empty() ? "" : ", ", phase,
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStarted).count());
+    phaseStarted = now;
+  };
+
   // check whether all the dependencies are available or not
   SetText(g_localizeStrings.Get(24058));
   std::pair<std::string, std::string> failedDep;
@@ -794,6 +808,7 @@ bool CAddonInstallJob::DoWork()
   m_currentType = CAddonInstallJob::TYPE_INSTALL;
 
   // run any pre-install functions
+  markPhase("download/verify");
   ADDON::OnPreInstall(m_addon);
 
   if (!CServiceBroker::GetAddonMgr().UnloadAddon(m_addon->ID()))
@@ -805,6 +820,7 @@ bool CAddonInstallJob::DoWork()
   // perform install
   if (!Install(installFrom, m_repo))
     return false;
+  markPhase("install (dependencies + files)");
 
   // Load new installed and if successed replace defined m_addon here with new one
   if (!CServiceBroker::GetAddonMgr().LoadAddon(m_addon->ID(), m_addon->Origin(),
@@ -814,6 +830,7 @@ bool CAddonInstallJob::DoWork()
     CLog::Log(LOGERROR, "CAddonInstallJob[{}]: failed to reload addon", m_addon->ID());
     return false;
   }
+  markPhase("reload");
 
   g_localizeStrings.LoadAddonStrings(URIUtils::AddFileToFolder(m_addon->Path(), "resources/language/"),
       CServiceBroker::GetSettingsComponent()->GetSettings()->GetString(CSettings::SETTING_LOCALE_LANGUAGE), m_addon->ID());
@@ -965,6 +982,15 @@ bool CAddonInstallJob::DoWork()
     if (eventLog)
       eventLog->Add(EventPtr(new CAddonManagementEvent(m_addon, text)), true, false);
   }
+
+  markPhase("post-install");
+#if defined(TARGET_PS5)
+  CLog::Log(LOGINFO, "CAddonInstallJob[{}]: installed in {} ms: {}", m_addon->ID(),
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - jobStarted)
+                .count(),
+            phaseTimes);
+#endif
 
   // and we're done!
   MarkFinished();
