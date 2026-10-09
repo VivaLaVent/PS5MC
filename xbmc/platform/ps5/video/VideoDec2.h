@@ -95,7 +95,13 @@ public:
 
   size_t MaxAccessUnit() const { return m_inputSize; }
 
+  // Unique per decoder object, never reused (unlike its memory addresses):
+  // lets the renderer tell one decoder's frames from the next one's.
+  uint64_t Instance() const { return m_instance; }
+
 private:
+  static uint64_t NextInstance();
+  const uint64_t m_instance = NextInstance();
   struct DirectMemory
   {
     void* address = nullptr;

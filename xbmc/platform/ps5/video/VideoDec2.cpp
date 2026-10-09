@@ -9,6 +9,8 @@
 #include "VideoDec2.h"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -425,13 +427,39 @@ bool CVideoDec2::Open(VideoDec2Codec codec, int width, int height, std::string& 
   return true;
 }
 
+uint64_t CVideoDec2::NextInstance()
+{
+  static std::atomic<uint64_t> next{1};
+  return next.fetch_add(1, std::memory_order_relaxed);
+}
+
 void CVideoDec2::Close()
 {
+  // Traced straight to the klog, step by step: if a call ever blocks here, the
+  // last line names it even when nothing else gets out.
+  const bool traced = m_decoder || m_computeQueue;
+  const auto start = std::chrono::steady_clock::now();
+  auto elapsed = [&start]
+  {
+    return static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                      std::chrono::steady_clock::now() - start)
+                                      .count());
+  };
+  if (traced)
+    Log("[ps5vdec] decoder %llu: closing\n", static_cast<unsigned long long>(m_instance));
   if (m_decoder)
-    sceVideodec2DeleteDecoder(m_decoder);
+  {
+    const int32_t rc = sceVideodec2DeleteDecoder(m_decoder);
+    Log("[ps5vdec] decoder %llu: deleted (%#x, %lld ms)\n",
+        static_cast<unsigned long long>(m_instance), static_cast<unsigned>(rc), elapsed());
+  }
   m_decoder = nullptr;
   if (m_computeQueue)
-    sceVideodec2ReleaseComputeQueue(m_computeQueue);
+  {
+    const int32_t rc = sceVideodec2ReleaseComputeQueue(m_computeQueue);
+    Log("[ps5vdec] decoder %llu: compute queue released (%#x, %lld ms)\n",
+        static_cast<unsigned long long>(m_instance), static_cast<unsigned>(rc), elapsed());
+  }
   m_computeQueue = nullptr;
   FreeDirect(m_frameMemory);
   FreeDirect(m_inputMemory);
@@ -445,6 +473,9 @@ void CVideoDec2::Close()
   m_cpuWorkspace = nullptr;
   m_cpuWorkspaceSize = 0;
   m_nextFrame = 0;
+  if (traced)
+    Log("[ps5vdec] decoder %llu: closed, memory released (%lld ms)\n",
+        static_cast<unsigned long long>(m_instance), elapsed());
   std::lock_guard<std::mutex> lock(m_frameMutex);
   for (auto& state : m_frameState)
     state = FrameState::Free;

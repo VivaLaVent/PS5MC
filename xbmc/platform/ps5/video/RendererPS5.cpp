@@ -39,25 +39,54 @@ void CRendererPS5::Register()
   VIDEOPLAYER::CRendererFactory::RegisterRenderer("ps5", CRendererPS5::Create);
 }
 
+// Teardown order (any path where a decoder can go away): the pictures may
+// hold the last reference to their decoder, and releasing them frees the
+// frame memory our textures alias. So the GPU first finishes every draw that
+// samples them, then the textures and images over that memory are destroyed,
+// and only then are the pictures released. Kodi deletes the renderer without
+// calling UnInit first, and this destructor runs before the base class's
+// (which has the glFinish) - so it must do this itself.
 CRendererPS5::~CRendererPS5()
 {
+  glFinish();
+  DeleteFrames();
   for (int i = 0; i < NUM_BUFFERS; ++i)
     DeleteTexture(i);
-  DeleteFrames();
 }
 
-void CRendererPS5::DeleteFrames()
+void CRendererPS5::UnInit()
 {
-  for (auto& [key, frame] : m_frames)
+  glFinish();
+  DeleteFrames();
+  CLinuxRendererGL::UnInit();
+}
+
+bool CRendererPS5::HasFrames(uint64_t decoder) const
+{
+  for (const auto& [key, frame] : m_frames)
+    if (std::get<0>(key) == decoder)
+      return true;
+  return false;
+}
+
+void CRendererPS5::DeleteFrames(uint64_t decoder)
+{
+  for (auto it = m_frames.begin(); it != m_frames.end();)
   {
+    if (decoder != 0 && std::get<0>(it->first) != decoder)
+    {
+      ++it;
+      continue;
+    }
+    FrameTextures& frame = it->second;
     if (frame.luma)
       glDeleteTextures(1, &frame.luma);
     if (frame.chroma)
       glDeleteTextures(1, &frame.chroma);
     DestroyMemoryImage(frame.lumaImage); // the textures keep their own reference
     DestroyMemoryImage(frame.chromaImage);
+    it = m_frames.erase(it);
   }
-  m_frames.clear();
 }
 
 bool CRendererPS5::Configure(const VideoPicture& picture, float fps, unsigned int orientation)
@@ -133,7 +162,7 @@ bool CRendererPS5::UploadTexture(int index)
   const unsigned chromaWidth = pitch / (2 * bytes);
   const unsigned chromaRows = rows / 2;
 
-  const FrameKey key{frame->Luma(), pitch, rows, bytes};
+  const FrameKey key{frame->DecoderInstance(), frame->Luma(), pitch, rows, bytes};
   auto it = m_frames.find(key);
   if (it == m_frames.end())
   {
@@ -235,10 +264,30 @@ bool CRendererPS5::NeedBuffer(int idx)
 
 void CRendererPS5::ReleaseBuffer(int idx)
 {
+  // Normally Kodi asks NeedBuffer first and the GPU is long done; teardown and
+  // flush paths release directly, so wait (bounded) for the GPU to finish
+  // sampling this picture before it goes back to the decoder.
   if (glIsSync(m_fences[idx]))
   {
+    const GLenum result =
+        glClientWaitSync(m_fences[idx], GL_SYNC_FLUSH_COMMANDS_BIT, 500 * 1000 * 1000);
+    if (result == GL_TIMEOUT_EXPIRED && !m_fenceTimeoutLogged)
+    {
+      m_fenceTimeoutLogged = true;
+      CLog::Log(LOGWARNING, "CRendererPS5: the GPU had not finished with picture {} after "
+                            "500 ms; releasing it anyway", idx);
+    }
     glDeleteSync(m_fences[idx]);
     m_fences[idx] = {};
+  }
+  // This picture may be the last owner of its decoder: then releasing it frees
+  // the memory our textures for that decoder alias - destroy them first, once
+  // the GPU has finished with every frame.
+  const auto* frame = dynamic_cast<CVideoBufferPS5*>(m_buffers[idx].videoBuffer);
+  if (frame && frame->HoldsLastDecoderReference() && HasFrames(frame->DecoderInstance()))
+  {
+    glFinish();
+    DeleteFrames(frame->DecoderInstance());
   }
   CLinuxRendererGL::ReleaseBuffer(idx);
 }

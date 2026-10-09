@@ -67,6 +67,11 @@ public:
   unsigned CodedHeight() const { return m_codedHeight; } // rows before the chroma plane
   unsigned BitDepth() const { return m_bitDepth; }       // 8 (NV12) or 10 (16-bit samples)
 
+  // The decoder whose memory this picture shows (0: none).
+  uint64_t DecoderInstance() const;
+  // Releasing this picture would destroy its decoder and free that memory.
+  bool HoldsLastDecoderReference() const;
+
 private:
   std::shared_ptr<CVideoDec2> m_decoder;
   int m_frameIndex = -1;
